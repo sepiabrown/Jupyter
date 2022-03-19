@@ -5,10 +5,13 @@ description = ""
 authors = ["Suwon Park <sepiabrown@naver.com>"]
 
 [tool.poetry.dependencies]
-python = "^3.9"
-pandas = "^1.4.1"
+python = "3.9"
+torch = "^1.11.0"
 numpy = "^1.22.3"
-matplotlib = "^3.5.1"
+pyro-ppl = "^1.8.0"
+torchvision = "^0.12.0"
+ronald-bdl = {path = "ronald_bdl", develop = true}
+pandas = "^1.4.1"
 
 [tool.poetry.dev-dependencies]
 

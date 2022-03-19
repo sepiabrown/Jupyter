@@ -15,7 +15,12 @@
         };
 
         python = pkgs.poetry2nix.mkPoetryEnv {
-          poetrylock = ./my-python-package/poetry.lock;
+          projectDir = ./my-python-package;
+          extraPackages = ps : [ ps.pip ];
+          editablePackageSources = {
+              ronald = ./my-python-package/ronald_bdl/ronald_bdl;
+          };
+          # poetrylock = ./my-python-package/poetry.lock;
         };
 
         pyproject = builtins.fromTOML (builtins.readFile ./my-python-package/pyproject.toml);
@@ -23,6 +28,7 @@
 
         iPythonWithPackages = pkgs.kernels.iPythonWith {
           name = "ms-thesis--env";
+          python3 = python;
           packages = p: 
             let
               # Building the local package using the standard way.
@@ -33,13 +39,13 @@
               };
               # Getting dependencies using Poetry.
               poetryDeps =
-                builtins.map (name: builtins.getAttr name p) depNames;
+                builtins.map (name: builtins.getAttr name p) depNames; # p : gets packages from 'python3 = python' ? maybe?
             in
-              [ ] ++ poetryDeps ;
+              [ myPythonPackage ] ++ poetryDeps ;
         };
         jupyterEnvironment = pkgs.jupyterlabWith {
           kernels = [ iPythonWithPackages ];
-          extraPackages = p: [p.hello];
+          extraPackages = ps: [ps.hello];
         };
       in rec {
         apps.jupyterlab = {
@@ -49,7 +55,9 @@
         defaultApp = apps.jupyterlab;
         # devShell = jupyterEnvironment.env;
         devShell = pkgs.mkShell rec {
+          inherit pkgs;
           buildInputs = [
+            pkgs
             jupyterEnvironment
             pkgs.poetry
             #iJulia.runtimePackages
