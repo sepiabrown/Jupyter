@@ -17,10 +17,9 @@
         python = pkgs.poetry2nix.mkPoetryEnv {
           projectDir = ./my-python-package;
           #extraPackages = ps : [ ps.pip ];
-          #editablePackageSources = {
-          #  ronald_bdl = ./my-python-package/ronald_bdl;#/ronald_bdl;
-          #};
-          # poetrylock = ./my-python-package/poetry.lock;
+          editablePackageSources = {
+            ronald_bdl = ./my-python-package/ronald_bdl;#/ronald_bdl;
+          };
         };
 
         pyproject = builtins.fromTOML (builtins.readFile ./my-python-package/pyproject.toml);
