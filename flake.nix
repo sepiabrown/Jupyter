@@ -17,7 +17,7 @@
         ### poetryExtraDeps = (ps: [ ps.emoji ]);
 
         python = pkgs.poetry2nix.mkPoetryEnv {
-          projectDir = ./my-python-package;
+          projectDir = ./.;
           #editablePackageSources = {
           #  ronald_bdl = "${builtins.getEnv "HOME"}/MS-Thesis/my-python-package/ronald_bdl";
           #ronald_bdl = ./my-python-package/ronald_bdl;
@@ -33,7 +33,7 @@
           # import ronald_bdl
         };
 
-        pyproject = builtins.fromTOML (builtins.readFile ./my-python-package/pyproject.toml);
+        pyproject = builtins.fromTOML (builtins.readFile ./pyproject.toml);
         depNames = builtins.attrNames pyproject.tool.poetry.dependencies;
 
         iPythonWithPackages = pkgs.kernels.iPythonWith {
@@ -81,8 +81,8 @@
       }
     );
 }
-# Initialize by making my-python-package and 
+# Initialize by 
 # $ nix shell nixpkgs#poetry
 # $ poetry init
 # $ poetry add ~ ~ ~
-# inside my-python-package
+# inside MS-Thesis
