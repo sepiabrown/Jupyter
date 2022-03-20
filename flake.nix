@@ -16,10 +16,10 @@
 
         python = pkgs.poetry2nix.mkPoetryEnv {
           projectDir = ./my-python-package;
-          extraPackages = ps : [ ps.pip ];
-          editablePackageSources = {
-              ronald = ./my-python-package/ronald_bdl/ronald_bdl;
-          };
+          #extraPackages = ps : [ ps.pip ];
+          #editablePackageSources = {
+          #  ronald_bdl = ./my-python-package/ronald_bdl;#/ronald_bdl;
+          #};
           # poetrylock = ./my-python-package/poetry.lock;
         };
 
@@ -55,9 +55,7 @@
         defaultApp = apps.jupyterlab;
         # devShell = jupyterEnvironment.env;
         devShell = pkgs.mkShell rec {
-          inherit pkgs;
           buildInputs = [
-            pkgs
             jupyterEnvironment
             pkgs.poetry
             #iJulia.runtimePackages

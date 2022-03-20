@@ -1,7 +1,7 @@
 from torchvision.models.squeezenet import SqueezeNet as SqueezeNetTorchVision
 from torchvision.models.squeezenet import model_urls
-from torch.hub import load_state_dict_from_url
-#from torchvision.models.utils import load_state_dict_from_url
+#from torch.hub import load_state_dict_from_url
+from torchvision.models.utilss import load_state_dict_from_url
 
 
 class SqueezeNet(SqueezeNetTorchVision):

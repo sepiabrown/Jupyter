@@ -10,8 +10,12 @@ torch = "^1.11.0"
 numpy = "^1.22.3"
 pyro-ppl = "^1.8.0"
 torchvision = "^0.12.0"
-ronald-bdl = {path = "ronald_bdl", develop = true}
 pandas = "^1.4.1"
+kiwisolver = "<=1.3.2"
+cppy = "<=1.1.0"
+matplotlib = "^3.5.1"
+tomli = "<=1.2.3"
+ronald-bdl = {path = "ronald_bdl", develop = true}
 
 [tool.poetry.dev-dependencies]
 
