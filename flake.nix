@@ -14,12 +14,23 @@
           overlays = (builtins.attrValues jupyterWith.overlays); # ++ [ (import ./haskell-overlay.nix) ];
         };
 
+        ### poetryExtraDeps = (ps: [ ps.emoji ]);
+
         python = pkgs.poetry2nix.mkPoetryEnv {
           projectDir = ./my-python-package;
-          #extraPackages = ps : [ ps.pip ];
-          editablePackageSources = {
-            ronald_bdl = ./my-python-package/ronald_bdl;#/ronald_bdl;
-          };
+          #editablePackageSources = {
+          #  ronald_bdl = "${builtins.getEnv "HOME"}/MS-Thesis/my-python-package/ronald_bdl";
+          #ronald_bdl = ./my-python-package/ronald_bdl;
+          #};
+          ### extraPackages = poetryExtraDeps;
+
+          # For jupyter-lab's use, there is no need to add packages that 
+          # are frequently edited.
+          # Just import by using
+          #
+          # import sys
+          # sys.path.append("/home/sepiabrown/MS-Thesis/my-python-package/")
+          # import ronald_bdl
         };
 
         pyproject = builtins.fromTOML (builtins.readFile ./my-python-package/pyproject.toml);
@@ -33,18 +44,20 @@
               # Building the local package using the standard way.
               myPythonPackage = p.buildPythonPackage {
                 pname = "my-python-package";
-                version = "0.1.0";
+                version = "0.2.0";
                 src = ./my-python-package;
               };
               # Getting dependencies using Poetry.
               poetryDeps =
-                builtins.map (name: builtins.getAttr name p) depNames; # p : gets packages from 'python3 = python' ? maybe?
+                builtins.map (name: builtins.getAttr name p) depNames; 
+                # p : gets packages from 'python3 = python' ? maybe?
             in
-              [ myPythonPackage ] ++ poetryDeps ;
+              # [ p.emoji ] ++ # adds nixpkgs.url version  python pkgs.
+              [ myPythonPackage ] ++ poetryDeps; ### ++ (poetryExtraDeps p);
         };
         jupyterEnvironment = pkgs.jupyterlabWith {
           kernels = [ iPythonWithPackages ];
-          extraPackages = ps: [ps.hello];
+          extraPackages = ps: [ps.hello ];
         };
       in rec {
         apps.jupyterlab = {
