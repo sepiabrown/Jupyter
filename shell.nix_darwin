@@ -1,0 +1,71 @@
+{ pkgs ? import ../nixpkgs {} }:
+let
+  pkgs = import ../nixpkgs {
+    overlays = [
+      (self: super: rec {
+        blas_new = (super.blas.override {
+          blasProvider = self.mkl;
+        }).overrideAttrs (oldAttrs: {
+          buildInputs = (oldAttrs.buildInputs or [ ])
+                        ++ self.lib.optional self.stdenv.hostPlatform.isDarwin self.fixDarwinDylibNames;
+        });
+        #lapack_new = (super.lapack.override {
+        #  lapackProvider = self.mkl;
+        #}).overrideAttrs (oldAttrs: {
+        #  buildInputs = (oldAttrs.buildInputs or [ ])
+        #                ++ self.lib.optional self.stdenv.hostPlatform.isDarwin self.fixDarwinDylibNames;
+        #});
+        poetry2nix = super.poetry2nix.overrideScope' (p2nixself: p2nixsuper: {
+          defaultPoetryOverrides = p2nixsuper.defaultPoetryOverrides.extend (pyself: pysuper: {
+            numpy = pysuper.numpy.overridePythonAttrs ( old:
+              let
+                blas = blas_new;
+                #lapack = lapack_new;
+                blasImplementation = "mkl";#nixpkgs.lib.nameFromURL blas.name "-";
+                cfg = super.writeTextFile {
+                  name = "site.cfg";
+                  text = (
+                    pkgs.lib.generators.toINI
+                      { }
+                      {
+                        ${blasImplementation} = {
+                          include_dirs = "${blas}/include";
+                          library_dirs = "${blas}/lib";
+                        } // pkgs.lib.optionalAttrs (blasImplementation == "mkl") {
+                          mkl_libs = "mkl_rt";
+                          lapack_libs = "";
+                        };
+                      }
+                  );
+                };
+              in
+              {
+                nativeBuildInputs = (old.nativeBuildInputs or [ ])
+                                    ++ [ self.gfortran ]
+                              ++ self.lib.optional self.stdenv.hostPlatform.isDarwin self.fixDarwinDylibNames;
+                buildInputs = (old.buildInputs or [ ])
+                              ++ [ blas self.lapack ]
+                              ++ self.lib.optional self.stdenv.hostPlatform.isDarwin self.fixDarwinDylibNames;
+                enableParallelBuilding = true;
+                preBuild = ''
+                  ln -s ${cfg} site.cfg
+                '';
+                passthru = old.passthru // {
+                  blas = blas;
+                  inherit blasImplementation cfg;
+                };
+              }
+            );
+            pillow = pysuper.pillow.overridePythonAttrs ( old: {
+              buildInputs = (old.buildInputs or [ ]) ++ [ self.xorg.libxcb ];
+            });
+          });
+        });
+      })
+    ];
+  };
+  myAppEnv = pkgs.poetry2nix.mkPoetryEnv {
+    projectDir = ./.;
+  };
+in 
+  { inherit myAppEnv pkgs;}

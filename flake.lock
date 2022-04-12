@@ -51,11 +51,11 @@
     },
     "flake-utils": {
       "locked": {
-        "lastModified": 1644229661,
-        "narHash": "sha256-1YdnJAsNy69bpcjuoKdOYQX0YxZBiCYZo4Twxerqv7k=",
+        "lastModified": 1649676176,
+        "narHash": "sha256-OWKJratjt2RW151VUlJPRALb7OU2S5s+f0vLj4o1bHM=",
         "owner": "numtide",
         "repo": "flake-utils",
-        "rev": "3cecb5b042f7f209c56ffd8371b2711a290ec797",
+        "rev": "a4b154ebbdc88c8498a5c7b01589addc9e9cb678",
         "type": "github"
       },
       "original": {
@@ -191,15 +191,16 @@
         "nixpkgs": "nixpkgs_4"
       },
       "locked": {
-        "lastModified": 1646370044,
-        "narHash": "sha256-2nQeMGsTe3/ipk9YpklemM7h72s2XC6v4xQgtRjcLGM=",
-        "owner": "tweag",
+        "lastModified": 1648873957,
+        "narHash": "sha256-pMHPFtTNDNcmfUPeDHjPzjq0AtuQv3bNwPkvE2STrJ8=",
+        "owner": "sepiabrown",
         "repo": "jupyterWith",
-        "rev": "bdd25654f301fd994bf47fe6f846b5b240d63107",
+        "rev": "7d865b86d5aafd07ca6ae83deece1fc56811a022",
         "type": "github"
       },
       "original": {
-        "owner": "tweag",
+        "owner": "sepiabrown",
+        "ref": "flake_test",
         "repo": "jupyterWith",
         "type": "github"
       }
@@ -269,16 +270,16 @@
     },
     "nixpkgs_5": {
       "locked": {
-        "lastModified": 1647297614,
-        "narHash": "sha256-ulGq3W5XsrBMU/u5k9d4oPy65pQTkunR4HKKtTq0RwY=",
-        "owner": "NixOS",
+        "lastModified": 1649755704,
+        "narHash": "sha256-oC3pnip5UMCHt8xYY8nsUmPnpQiUvTfiKmdCfg+sbqY=",
+        "owner": "sepiabrown",
         "repo": "nixpkgs",
-        "rev": "73ad5f9e147c0d2a2061f1d4bd91e05078dc0b58",
+        "rev": "50b4821832b181b8ce4201ff1adbefaa833867c6",
         "type": "github"
       },
       "original": {
-        "owner": "NixOS",
-        "ref": "nixos-unstable",
+        "owner": "sepiabrown",
+        "ref": "blas_darwin_mkl",
         "repo": "nixpkgs",
         "type": "github"
       }

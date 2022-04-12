@@ -1,14 +1,14 @@
 {
   description = "MS thesis environment";
   inputs = {
-    nixpkgs.url = "github:sepiabrown/nixpkgs/blas_darwin_mkl"; # poetry doesn't work at nixos-20.09
+    nixpkgs.url = "github:NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
     jupyterWith = {
       url = "github:sepiabrown/jupyterWith/flake_test";
-      #inputs.nixpkgs.follows = "nixpkgs";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
     flake-utils = {
       url = "github:numtide/flake-utils";
-      #inputs.nixpkgs.follows = "nixpkgs";
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
@@ -16,18 +16,12 @@
     {
       overlay = nixpkgs.lib.composeManyExtensions [
         (self: super: rec { 
-          blas_new = (super.blas.override {
+          blas_new = super.blas.override {
             blasProvider = self.mkl;
-          }).overrideAttrs (oldAttrs: {
-            buildInputs = (oldAttrs.buildInputs or [ ]) 
-                          ++ self.lib.optional self.stdenv.hostPlatform.isDarwin self.fixDarwinDylibNames;
-          });
-          lapack_new = (super.lapack.override {
+          };
+          lapack_new = super.lapack.override {
             lapackProvider = self.mkl;
-          }).overrideAttrs (oldAttrs: {
-            buildInputs = (oldAttrs.buildInputs or [ ]) 
-                          ++ self.lib.optional self.stdenv.hostPlatform.isDarwin self.fixDarwinDylibNames;
-          });
+          };
           poetry2nix = super.poetry2nix.overrideScope' (p2nixself: p2nixsuper: {
           # pyself & pysuper refers to python packages
             defaultPoetryOverrides = p2nixsuper.defaultPoetryOverrides.extend (pyself: pysuper: {
@@ -38,41 +32,41 @@
                 buildInputs = (old.buildInputs or [ ]) ++ [ self.xorg.libxcb ];
               });
               numpy = pysuper.numpy.overridePythonAttrs ( old:
-                let
-                  blas = blas_new;
-                  lapack = lapack_new;
-                  blasImplementation = "mkl";#nixpkgs.lib.nameFromURL blas.name "-";
-                  cfg = super.writeTextFile {
-                    name = "site.cfg";
-                    text = (
-                      nixpkgs.lib.generators.toINI
-                        { }
-                        {
-                          ${blasImplementation} = {
-                            include_dirs = "${blas}/include";
-                            library_dirs = "${blas}/lib";
-                          } // nixpkgs.lib.optionalAttrs (blasImplementation == "mkl") {
-                            mkl_libs = "mkl_rt";
-                            lapack_libs = "";
-                          };
-                        }
-                    );
-                  };
-                in
+                #let
+                #  blas = blas_new;
+                #  lapack = lapack_new;
+                #  blasImplementation = "mkl";#nixpkgs.lib.nameFromURL blas.name "-";
+                #  cfg = super.writeTextFile {
+                #    name = "site.cfg";
+                #    text = (
+                #      nixpkgs.lib.generators.toINI
+                #        { }
+                #        {
+                #          ${blasImplementation} = {
+                #            include_dirs = "${blas}/include";
+                #            library_dirs = "${blas}/lib";
+                #          } // nixpkgs.lib.optionalAttrs (blasImplementation == "mkl") {
+                #            mkl_libs = "mkl_rt";
+                #            lapack_libs = "";
+                #          };
+                #        }
+                #    );
+                #  };
+                #in
                 {
                   nativeBuildInputs = (old.nativeBuildInputs or [ ])
                                       ++ [ self.gfortran ];
                   buildInputs = (old.buildInputs or [ ]) 
-                                ++ [ blas lapack ]
+                                #++ [ blas lapack ]
                                 ++ self.lib.optional self.stdenv.hostPlatform.isDarwin self.fixDarwinDylibNames;
                   enableParallelBuilding = true;
-                  preBuild = ''
-                    ln -s ${cfg} site.cfg
-                  '';
-                  passthru = old.passthru // {
-                    blas = blas;
-                    inherit blasImplementation cfg;
-                  };
+                  #preBuild = ''
+                  #  ln -s ${cfg} site.cfg
+                  #'';
+                  #passthru = old.passthru // {
+                  #  blas = blas;
+                  #  inherit blasImplementation cfg;
+                  #};
                 }
               );
               #numpy = pysuper.numpy.overridePythonAttrs (
