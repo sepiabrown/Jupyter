@@ -1,9 +1,9 @@
 {
   description = "MS thesis environment";
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
+    nixpkgs.url = "github:sepiabrown/nixpkgs/test_mkl_on_server_echo1";#NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
     jupyterWith = {
-      url = "github:sepiabrown/jupyterWith/flake_test";
+      url = "github:tweag/jupyterWith"; 
       inputs.nixpkgs.follows = "nixpkgs";
     };
     flake-utils = {
@@ -14,28 +14,41 @@
 
   outputs = { self, nixpkgs, jupyterWith, flake-utils }:
     {
-      overlay = nixpkgs.lib.composeManyExtensions [
+      overlay = nixpkgs.lib.composeManyExtensions ([
         (self: super: rec { 
-          blas_new = super.blas.override {
+          blas = super.blas.override {
             blasProvider = self.mkl;
           };
-          lapack_new = super.lapack.override {
+          lapack = super.lapack.override {
             lapackProvider = self.mkl;
           };
+          python3 = super.python3.override (old: { # for jupyterWith!
+            packageOverrides = 
+              super.lib.composeExtensions
+                (old.packageOverrides or (_: _: {}))
+                (python-self: python-super: {
+                  httpx = python-super.httpx.overridePythonAttrs (oldAttrs: { # for jupyterlab -> .. -> falcon
+                    doCheck = false;
+                  });
+                });
+          });
           poetry2nix = super.poetry2nix.overrideScope' (p2nixself: p2nixsuper: {
           # pyself & pysuper refers to python packages
             defaultPoetryOverrides = p2nixsuper.defaultPoetryOverrides.extend (pyself: pysuper: {
               #importlib-metadata = pysuper.importlib-metadata.overridePythonAttrs ( old: {
               #  format = "pyproject";
               #});
+              pyparsing = pysuper.pyparsing.overridePythonAttrs ( old: {
+                buildInputs = (old.buildInputs or [ ]) ++ [ pyself.flit-core ];
+              });
               pillow = pysuper.pillow.overridePythonAttrs ( old: {
                 buildInputs = (old.buildInputs or [ ]) ++ [ self.xorg.libxcb ];
               });
               numpy = pysuper.numpy.overridePythonAttrs ( old:
                 let
-                  blas = blas_new;
-                  lapack = lapack_new;
-                  blasImplementation = "mkl";#nixpkgs.lib.nameFromURL blas.name "-";
+                  blas = self.blas; # not super.blas
+                  lapack = self.lapack; # not super.lapack
+                  blasImplementation = nixpkgs.lib.nameFromURL blas.name "-";
                   cfg = super.writeTextFile {
                     name = "site.cfg";
                     text = (
@@ -66,25 +79,6 @@
                   };
                 }
               );
-              #numpy = pysuper.numpy.overridePythonAttrs (
-              #  old:
-              #  let
-              #    blas = blas_new;
-              #    #lapack = lapack_new;
-              #    blasImplementation = nixpkgs.lib.nameFromURL blas.name "-";
-              #  in
-              #  {
-              #    buildInputs = (old.buildInputs or [ ]) ++ [ blas ];
-              #    passthru = old.passthru // {
-              #      blas = blas;
-              #      inherit blasImplementation;# cfg;
-              #    };
-              #  }
-              #);
-              # numpy = pysuper.numpy.override {
-              #   blas = blas_new;
-              #   lapack = lapack_new;
-              # }; # NOT WORKING
             });
           });
         })
@@ -94,13 +88,17 @@
         #    projectDir = ./.;
         #  };
         #})
-      ];
+        #jupyterWith.overlays.jupyterWith
+        #jupyterWith.overlays.haskell
+        #jupyterWith.overlays.python
+      ] ++ (builtins.attrValues jupyterWith.overlays));
     } // (flake-utils.lib.eachSystem [ "x86_64-linux" "x86_64-darwin" ] (system:
       let
         pkgs = import nixpkgs {
           system = system;
           config.allowUnfree = true;
-          overlays = (builtins.attrValues jupyterWith.overlays) ++ [ self.overlay ]; # [ (import ./haskell-overlay.nix) ];
+          overlays = [ self.overlay ];
+          #overlays = (builtins.attrValues jupyterWith.overlays) ++ [ self.overlay ]; # [ (import ./haskell-overlay.nix) ];
         };
 
         ### poetryExtraDeps = (ps: [ ps.emoji ]);
@@ -176,3 +174,13 @@
 # $ poetry init
 # $ poetry add ~ ~ ~
 # inside MS-Thesis
+# On bayes-lab server, mkl is already installed.
+# Nix captures the existance of mkl, but without explicit declaration of mkl in flake.nix,
+# build process fails with error "cannot find -lmkl_rt"
+# Thus, through overlay, we need to override blas and lapack which use mkl.
+# In overlay, names should be blas, lapack, not blas_new lapack_new for them to be overriden globally.
+#
+# ssh -f -p 7777 sepiabrown@snubayes.duckdns.org "./.cargo/bin/nix-user-chroot ~/.nix bash -l -c 'nix run ./MS-Thesis -- --port 3333'"
+# ssh -N -p7777 -L3333:localhost:3333 sepiabrown@snubayes.duckdns.org
+# 
+# nohup ssh -f -p 7777 -L 3333:localhost:3333 sepiabrown@snubayes.duckdns.org "./.cargo/bin/nix-user-chroot ~/.nix bash -l -c 'nix run ./MS-Thesis -- --port 3333'" > /dev/null
