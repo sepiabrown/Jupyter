@@ -238,6 +238,10 @@
         #});
         devShell = pkgs.mkShell rec {
           buildInputs = [
+            # stdenv reference :
+            # https://discourse.nixos.org/t/nixos-with-poetry-installed-pandas-libstdc-so-6-cannot-open-shared-object-file/8442/3
+            # https://nixos.wiki/wiki/Packaging/Quirks_and_Caveats#ImportError:_libstdc.2B.2B.so.6:_cannot_open_shared_object_file:_No_such_file
+            pkgs.stdenv.cc.cc.lib
           ];
           nativeBuildInputs = [
             jupyterEnvironment
