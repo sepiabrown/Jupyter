@@ -2,6 +2,7 @@
   description = "MS thesis environment";
   inputs = {
     nixpkgs.url = "github:sepiabrown/nixpkgs/test_mkl_on_server_echo1";#NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
+    #nixpkgs_1703.url = "nixpkgs/1849e695b00a54cda86cb75202240d949c10c7ce"; # poetry doesn't work at nixos-20.09
     jupyterWith = {
       url = "github:tweag/jupyterWith"; 
       inputs.nixpkgs.follows = "nixpkgs";
@@ -12,7 +13,7 @@
     };
   };
 
-  outputs = { self, nixpkgs, jupyterWith, flake-utils }:
+  outputs = inputs@{ self, nixpkgs, jupyterWith, flake-utils }:
     {
       overlay = nixpkgs.lib.composeManyExtensions ([
         (self: super: { 
@@ -177,10 +178,11 @@
           #overlays = (builtins.attrValues jupyterWith.overlays) ++ [ self.overlay ]; # [ (import ./haskell-overlay.nix) ];
         };
 
-        ### poetryExtraDeps = (ps: [ ps.emoji ]);
-
-        python_test = pkgs.poetry2nix.mkPoetryEnv {
+        python_custom = pkgs.poetry2nix.mkPoetryEnv rec {
           projectDir = ./.;
+          pyproject = projectDir + "/pyproject.toml";
+          poetrylock = projectDir + "/poetry.lock";
+
           #editablePackageSources = {
           #  ronald_bdl = "${builtins.getEnv "HOME"}/MS-Thesis/my-python-package/ronald_bdl";
           #ronald_bdl = ./my-python-package/ronald_bdl;
@@ -196,12 +198,52 @@
           # import ronald_bdl
         };
 
+        #pkgs_1703 = import (builtins.fetchGit {
+        #  # Descriptive name to make the store path easier to identify
+        #  name = "nixos-1703";
+        #  url = "https://github.com/nixos/nixpkgs/";
+        #  # Commit hash for nixos-unstable as of 2018-09-12
+        #  # `git ls-remote https://github.com/nixos/nixpkgs nixos-unstable`
+        #  #allRefs = true;
+        #  ref = "release-17.09";
+        #  rev = "3ba3d8d8cbec36605095d3a30ff6b82902af289c";
+        #  #rev = "1849e695b00a54cda86cb75202240d949c10c7ce"; 1703
+        #  #rev = "a7ecde854aee5c4c7cd6177f54a99d2c1ff28a31"; 2111
+        #}) { system = system; };
+
+        #python-with-my-packages = (pkgs_1703.python27.withPackages (p: with p; [
+        #  cython
+        #  numpy
+        #  scipy
+        #  scikitimage
+        #  matplotlib
+        #  ipython
+        #  h5py
+        #  #leveldb
+        #  networkx
+        #  nose
+        #  pandas
+        #  #python-dateutil
+        #  pyparsing
+        #  dateutil
+        #  protobuf
+        #  gflags
+        #  pyyaml
+        #  pillow
+        #  six
+        #])).override (args: { ignoreCollisions = true; });
+
+        #pkgs_1703.poetry2nix.mkPoetryEnv rec {
+        #  projectDir = ./.;
+        #  python = pkgs.python31;
+        #};
+
         pyproject = builtins.fromTOML (builtins.readFile ./pyproject.toml);
         depNames = builtins.attrNames pyproject.tool.poetry.dependencies;
 
         iPythonWithPackages = pkgs.kernels.iPythonWith {
           name = "ms-thesis--env";
-          python3 = python_test;
+          python3 = python_custom;
           packages = p: 
             let
               # Building the local package using the standard way.
@@ -228,7 +270,7 @@
           program = "${jupyterEnvironment}/bin/jupyter-lab";
         };
         defaultApp = apps.jupyterlab;
-        inherit nixpkgs python_test;
+        inherit nixpkgs python_custom;
         #devShell = python_test.env.overrideAttrs (old: {
         #  nativeBuildInputs = with pkgs; old.nativeBuildInputs ++ [
         #    jupyterEnvironment
@@ -246,14 +288,19 @@
           nativeBuildInputs = [
             jupyterEnvironment
             pkgs.poetry
-            #iJulia.runtimePackages
             (pkgs.lib.getBin pkgs.caffe)
-            python_test
-            #(pkgs.lib.getBin python_test)
+            #python-with-my-packages
+            #poetry_31
+            #python_custom
+            #(pkgs.lib.getBin python_custom)
+
+            #iJulia.runtimePackages
           ];
           #JULIA_DEPOT_PATH = "./.julia_depot";
 
+          #export PYTHONPATH="${python-with-my-packages}/${python-with-my-packages.sitePackages}:$PYTHONPATH"
           #shellHook = ''
+          #  export PYTHONPATH="${python-with-my-packages}/lib/python2.7/site-packages:$PYTHONPATH"
           #'';
         };
       }
