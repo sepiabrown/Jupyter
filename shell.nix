@@ -179,15 +179,16 @@ let
   #        kernels = [ iPythonWithPackages ];
   #        extraPackages = ps: [ps.hello ];
   #      };
-in python-with-my-packages.env #python_test.env #jupyterEnvironment.env #myAppEnv.env
-  #{ inherit myAppEnv pkgs_new pkgs_import;}
-#pkgs.mkShell {
-#  buildInputs = [
-#    python-with-my-packages
-#    # other dependencies
-#  ];
-#  shellHook = ''
-#    PYTHONPATH=${python-with-my-packages}/${python-with-my-packages.sitePackages}
-#    # maybe set more env-vars
-#  '';
-#}
+in #python-with-my-packages.env #python_test.env #jupyterEnvironment.env #myAppEnv.env
+   #{ inherit myAppEnv pkgs_new pkgs_import;}
+pkgs_new.mkShell {
+  buildInputs = [
+    python-with-my-packages
+    pkgs_new.cudaPackages.cudatoolkit_10_0
+    # other dependencies
+  ];
+  shellHook = ''
+    PYTHONPATH=${python-with-my-packages}/${python-with-my-packages.sitePackages}
+    # maybe set more env-vars
+  '';
+}
