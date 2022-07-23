@@ -2,7 +2,8 @@
   description = "MS thesis environment";
   inputs = {
     #nixpkgs_edge.url = "github:sepiabrown/nixpkgs/poetry_edge_test2";#test_mkl_on_server_echo1";#NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
-    nixpkgs.url = "github:sepiabrown/nixpkgs/poetry_test"; #test_mkl_on_server_echo1";#NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
+    nixpkgs.url = "github:sepiabrown/nixpkgs/download_fix_220721"; #test_mkl_on_server_echo1";#NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
+    nixpkgs2.url = "github:sepiabrown/nixpkgs/download_fix_220721"; #test_mkl_on_server_echo1";#NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
     #nixpkgs_2009.url = "nixpkgs/nixos-20.09"; # poetry doesn't work at nixos-20.09
     #nixpkgs_1703.url = "nixpkgs/1849e695b00a54cda86cb75202240d949c10c7ce"; # poetry doesn't work at nixos-20.09
     jupyterWith = {
@@ -13,11 +14,28 @@
       url = "github:numtide/flake-utils";
       #inputs.nixpkgs.follows = "nixpkgs";
     };
+    poetry2nix_nix_community = {
+      url = "github:nix-community/poetry2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
     dpaetzel.url = "github:dpaetzel/overlays/master";
   };
 
-  outputs = inputs@{ self, nixpkgs, jupyterWith, flake-utils, dpaetzel, ... }:
+  outputs = inputs: with inputs; # inputs@{ self, nixpkgs, jupyterWith, flake-utils, dpaetzel, ... }:
     let
+      LD_LIBRARY_PATH = ''
+        ${nixpkgs.lib.makeLibraryPath [ pkgs.cudaPackages_11_6.cudatoolkit "${pkgs.cudaPackages_11_6.cudatoolkit}" pkgs.cudaPackages_11_6.cudnn pkgs.nvidia_custom ]}:$LD_LIBRARY_PATH
+      '';
+
+      #pkgs_poetry = import nixpkgs {
+      #  system = "x86_64-linux";
+      #  config.allowUnfree = true;
+      #  overlays = [ self.overlay_poetry ];
+      #};
+      #python_custom_poetry = pkgs_poetry.poetry2nix.mkPoetryEnv rec {
+      #  projectDir = ./.;
+      #};
+
       pkgs = import nixpkgs {
         system = "x86_64-linux";
         config.allowUnfree = true;
@@ -25,9 +43,9 @@
         overlays = [ self.overlay ];
         #overlays = (builtins.attrValues jupyterWith.overlays) ++ [ self.overlay ]; # [ (import ./haskell-overlay.nix) ];
       };
-
       python_custom = pkgs.poetry2nix.mkPoetryEnv rec {
         projectDir = ./.;
+        #python = pkgs.python39;
         #extraPackages = ps: [ ps.pytorch_custom2 ];
         #editablePackageSources = {
         #  ronald_bdl = "${builtins.getEnv "HOME"}/MS-Thesis/my-python-package/ronald_bdl";
@@ -106,29 +124,106 @@
       #}).nixGLNvidia;
     in
     {
+      #overlay_poetry = nixpkgs.lib.composeManyExtensions ([
+      #  #poetry2nix_nix_community.overlay
+      #  (self: super: {
+      #    poetry2nix = super.poetry2nix.overrideScope' (p2nixself: p2nixsuper: {
+      #      # pyself & pysuper refers to python packages
+      #      defaultPoetryOverrides = p2nixsuper.defaultPoetryOverrides.extend (pyself: pysuper: {
+      #        poetry-plugin-export = pysuper.buildPythonPackage rec {
+      #          pname = "poetry-plugin-export";
+      #          version = "1.0.5";
+      #          src = pyself.fetchPypi {
+      #            inherit pname version;
+      #            hash = "sha256-53likuqvrBMWFJ86gHCSPCoiFMmNBG3hJGtNjrCwyEs=";
+      #          };
+      #          nativeBuildInputs = [ pyself.pythonRelaxDepsHook ];
+      #          pythonRemoveDeps = [ "poetry" ];
+      #          buildInputs = [
+      #            pyself.poetry-core
+      #          ];
+      #          doCheck = false;
+      #        };
+      #        poetry-core = pysuper.poetry-core.overridePythonAttrs (old: rec {
+      #          # 1.2.0b1
+      #          version = "1.1.0b3";
+      #          src = self.fetchFromGitHub {
+      #            owner = "python-poetry";
+      #            repo = "poetry-core";
+      #            rev = version;
+      #            sha256 = "sha256-clQw8twOUYL8Ew/FioKwOIJwIhsVPuyF5McVR2zzrO4=";
+      #          };
+      #          doCheck = false;
+      #          postPatch = nixpkgs.lib.optionalString (nixpkgs.lib.versionOlder self.python.version "3.8") ''
+      #            # remove >1.0.3
+      #            substituteInPlace pyproject.toml \
+      #              --replace 'importlib-metadata = {version = "^1.7.0", python = "~2.7 || >=3.5, <3.8"}' \
+      #                'importlib-metadata = {version = ">=1.7.0", python = "~2.7 || >=3.5, <3.8"}'
+      #          '';
+
+      #          nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
+      #            #pyself.intreehooks
+      #          ];
+
+      #          propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ nixpkgs.lib.optionals (nixpkgs.lib.versionOlder self.python.version "3.8") [
+      #            #`pyself.importlib-metadata
+      #          ] ++ nixpkgs.lib.optionals pyself.isPy27 [
+      #            pyself.pathlib2
+      #            pyself.typing
+      #          ];
+
+      #          checkInputs = [
+      #            nixpkgs.git
+      #            pyself.pep517
+      #            pyself.pytest-mock
+      #            pyself.pytestCheckHook
+      #            pyself.tomlkit
+      #            pyself.virtualenv
+      #          ];
+      #          # 1.1.13
+      #          # "Vendor" dependencies (for build-system support)
+      #          #postPatch = ''
+      #          #  echo "import sys" >> poetry/__init__.py
+      #          #  for path in $propagatedBuildInputs; do
+      #          #      echo "sys.path.insert(0, \"$path\")" >> poetry/__init__.py
+      #          #  done
+      #          #'';
+
+      #          ## Propagating dependencies leads to issues downstream
+      #          ## We've already patched poetry to prefer "vendored" dependencies
+      #          #postFixup = ''
+      #          #  rm $out/nix-support/propagated-build-inputs
+      #          #'';
+      #        });
+
+      #      });
+      #    });
+      #  })
+      #]);
       overlay = nixpkgs.lib.composeManyExtensions ([
+        #poetry2nix_nix_community.overlay
         (self: super: {
-          polynote = self.stdenv.mkDerivation rec {
-            pname = "polynote";
-            version = "0.4.5";
-            src = builtins.fetchurl {
-              url = "https://github.com/polynote/polynote/releases/download/0.4.5/polynote-dist.tar.gz";
-              sha256 = "sha256:1m7braf2d9gmqz270xrj0w4bc3j58bz0mx3h1ik9p1221dz2xc1j"; #super.lib.fakeSha256;
-            };
-            buildInputs = (with python_custom.pkgs; [ virtualenv ipython nbconvert numpy pandas jedi jep ]);
-            patchPhase = ''
-              substituteInPlace polynote.py \
-                --replace 'os.path.dirname(os.path.realpath(__file__))' 'os.getcwd()' \
-                --replace 'p.joinpath("jep") for p in paths if p.joinpath("jep").exists()' '"${python_custom.pkgs.jep}/lib/python3.9/site-packages/jep"' \
-                --replace 'cmd = f"java' 'cmd = f"${self.openjdk8}/bin/java' \
-                --replace '-Djava.library.path={jep_path}' '-Djava.library.path=${self.openjdk8}:${self.glibc}/lib:{jep_path}'
-            '';
-            installPhase = ''
-              mkdir -p $out/bin
-              cp polynote.py $out/bin/polynote
-              chmod +x $out/bin/polynote
-            '';
-          };
+          #polynote = self.stdenv.mkDerivation rec {
+          #  pname = "polynote";
+          #  version = "0.4.5";
+          #  src = builtins.fetchurl {
+          #    url = "https://github.com/polynote/polynote/releases/download/0.4.5/polynote-dist.tar.gz";
+          #    sha256 = "sha256:1m7braf2d9gmqz270xrj0w4bc3j58bz0mx3h1ik9p1221dz2xc1j"; #super.lib.fakeSha256;
+          #  };
+          #  buildInputs = (with python_custom.pkgs; [ virtualenv ipython nbconvert numpy pandas jedi jep jsonschema ]);
+          #  patchPhase = ''
+          #    substituteInPlace polynote.py \
+          #      --replace 'os.path.dirname(os.path.realpath(__file__))' 'os.getcwd()' \
+          #      --replace 'p.joinpath("jep") for p in paths if p.joinpath("jep").exists()' '"${python_custom.pkgs.jep}/lib/python3.9/site-packages/jep"' \
+          #      --replace 'cmd = f"java' 'cmd = f"${self.openjdk8}/bin/java' \
+          #      --replace '-Djava.library.path={jep_path}' '-Djava.library.path=${self.openjdk8}:${self.glibc}/lib:{jep_path}'
+          #  '';
+          #  installPhase = ''
+          #    mkdir -p $out/bin
+          #    cp polynote.py $out/bin/polynote
+          #    chmod +x $out/bin/polynote
+          #  '';
+          #};
 
           nvidia_custom = super.linuxPackages.nvidia_x11.overrideAttrs (oldAttrs: rec {
             version = "495.29.05";
@@ -148,6 +243,9 @@
           }).overrideAttrs (oldAttrs: {
             buildInputs = (oldAttrs.buildInputs or [ ])
             ++ self.lib.optional self.stdenv.hostPlatform.isDarwin self.fixDarwinDylibNames;
+          });
+          cython = pysuper.cython.overridePythonAttrs (old: rec {
+            propagatedBuildInputs = [ pyself.setuptools ];
           });
           python3 = super.python3.override (old: {
             # for jupyterWith!
@@ -199,7 +297,9 @@
                   );
                   jupyterlab = python-super.jupyterlab.overridePythonAttrs (oldAttrs: {
                     makeWrapperArgs = (oldAttrs.makeWrapperArgs or [ ]) ++ [
-                      "--set LD_LIBRARY_PATH ${self.cudaPackages_11_6.cudatoolkit}/lib64:${self.cudaPackages_11_6.cudnn}/lib:${self.nvidia_custom}/lib:$LD_LIBRARY_PATH"
+                      "--set LD_LIBRARY_PATH"
+                      LD_LIBRARY_PATH
+                      "--set TF_ENABLE_ONEDNN_OPTS 0" # when using GPU, oneDNN off is recommended 
                       "--set XLA_FLAGS --xla_gpu_cuda_data_dir=${self.cudaPackages_11_6.cudatoolkit}"
                       #"--set AESARA_FLAGS device=cuda0,dnn__base_path=${self.cudaPackages_11_6.cudnn},blas__ldflags=-lblas,dnn__library_path=${self.cudaPackages_11_6.cudnn}/lib,dnn__include_path=${self.cudaPackages_11_6.cudnn}/include"#${nixpkgs.lib.makeLibraryPath [ self.cudaPackages.cudnn ]}" #,cuda__root=${self.cudaPackages_11_6.cudatoolkit}
                       #"--set CUDA_HOME ${self.cudaPackages_11_6.cudatoolkit}"
@@ -265,8 +365,8 @@
                       '' + nixpkgs.lib.optionalString enableCuda ''
                         export TORCH_CUDA_ARCH_LIST="${nixpkgs.lib.strings.concatStringsSep ";" final_cudaArchList}"
                         export CC=${cudatoolkit.cc}/bin/gcc CXX=${cudatoolkit.cc}/bin/g++
-                        export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${nixpkgs.lib.makeLibraryPath [ cudatoolkit "${cudatoolkit}" ]}"
-                      '' + nixpkgs.lib.optionalString (enableCuda && cudnn != null) ''
+                      '' + ''export LD_LIBRARY_PATH='' + LD_LIBRARY_PATH +
+                      nixpkgs.lib.optionalString (enableCuda && cudnn != null) ''
                         export CUDNN_INCLUDE_DIR=${cudnn}/include
                       ''; # enableCuda ${cudatoolkit}/targets/x86_64-linux/lib
 
@@ -324,6 +424,11 @@
                 beniget = pysuper.beniget.overridePythonAttrs (old: rec {
                   propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ pysuper.gast ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyself.gast_5 ]);
                 });
+
+                cython = pysuper.cython.overridePythonAttrs (old: rec {
+                  propagatedBuildInputs = [ pyself.setuptools ];
+                });
+
                 gast_4 = pysuper.gast.overridePythonAttrs (old: rec {
                   pname = "gast";
                   version = "0.4.0";
@@ -345,6 +450,15 @@
                     rev = version;
                     sha256 = "sha256-fGkr1TIn1NPlRh4hTs9Rh/d+teGklrz+vWKCbacZT2M=";
                   };
+                });
+                jsonschema = pysuper.jsonschema.overridePythonAttrs (old: rec {
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
+                    pyself.hatchling
+                    # 'hatchling.build' has no attribute 'prepare_metadata_for_build_wheel': needs hatch-vcs not importlib-metadata
+                    pyself.hatch-vcs
+                    pyself.attrs
+                    pyself.pyrsistent
+                  ]);
                 });
                 jax = (self.python3.pkgs.jax.override {
                   inherit (pyself)
@@ -393,6 +507,20 @@
                     self.openjdk8
                   ];
                 });
+                #kaggle = pysuper.kaggle.overridePythonAttrs (old: {
+                #  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ pysuper.tqdm ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyself.tqdm pyself.tqdm_custom ]);
+                ###  #propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ [ pyself.t];
+                #});
+                #kaggle = (self.python3.pkgs.kaggle.override {
+                #  inherit (pyself) 
+                #    python-dateutil
+                #    python-slugify
+                #    six
+                #    requests
+                #    #tqdm_custom 
+                #    urllib3;
+                #  tqdm = pyself.tqdm_custom; # tqdm needs overriden numpy
+                #});
                 #libgpuarray = pysuper.libgpuarray.overridePythonAttrs ( old: {
                 #  libraryPath = nixpkgs.lib.makeLibraryPath (with self.cudaPackages_11_6; [ cudnn cudatoolkit.lib cudatoolkit.out self.clblas self.ocl-icd ]);
                 #  buildInputs = (old.buildInputs or [ ]) ++ [ self.cudaPackages_11_6.cudatoolkit self.cudaPackages_11_6.cudnn pyself.nose];
@@ -414,8 +542,20 @@
                 pillow = pysuper.pillow.overridePythonAttrs (old: {
                   buildInputs = (old.buildInputs or [ ]) ++ [ self.xorg.libxcb ];
                 });
-                poetry-core = pysuper.poetry-core.overridePythonAttrs (old: {
+                poetry = pysuper.poetry.overridePythonAttrs (old: rec {
+                  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ pyself.setuptools ]) ((old.nativeBuildInputs or [ pysuper.setuptools ]) ++ [
+                  ]);
+                });
+                poetry-core = pysuper.poetry-core.overridePythonAttrs (old: rec {
                   # 1.2.0b1
+                  version = "1.1.0b3";
+                  src = self.fetchFromGitHub {
+                    owner = "python-poetry";
+                    repo = "poetry-core";
+                    rev = version;
+                    sha256 = "sha256-clQw8twOUYL8Ew/FioKwOIJwIhsVPuyF5McVR2zzrO4=";
+                  };
+                  doCheck = false;
                   postPatch = nixpkgs.lib.optionalString (nixpkgs.lib.versionOlder self.python.version "3.8") ''
                     # remove >1.0.3
                     substituteInPlace pyproject.toml \
@@ -457,6 +597,21 @@
                   #  rm $out/nix-support/propagated-build-inputs
                   #'';
                 });
+
+                poetry-plugin-export = pysuper.buildPythonPackage rec {
+                  pname = "poetry-plugin-export";
+                  version = "1.0.5";
+                  src = pyself.fetchPypi {
+                    inherit pname version;
+                    hash = "sha256-53likuqvrBMWFJ86gHCSPCoiFMmNBG3hJGtNjrCwyEs=";
+                  };
+                  nativeBuildInputs = [ pyself.pythonRelaxDepsHook ];
+                  pythonRemoveDeps = [ "poetry" ];
+                  buildInputs = [
+                    pyself.poetry-core
+                  ];
+                  doCheck = false;
+                };
                 #Theano = pysuper.Theano.overridePythonAttrs ( old: {
                 #  propagatedBuildInputs = [ 
                 #    pyself.libgpuarray
@@ -540,8 +695,9 @@
                     ];
                   });
                 traitlets = pysuper.traitlets.overridePythonAttrs (old: {
-                  propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ [ pyself.hatchling ];
+                  propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ [ pyself.hatchling pyself.numpy ];
                 });
+
                 numpy = pysuper.numpy.overridePythonAttrs (old:
                   let
                     blas = self.blas_custom; # not super.blas
@@ -577,6 +733,7 @@
                     };
                   }
                 );
+
                 # pythran needed by scipy
                 pythran = pysuper.pythran.overridePythonAttrs (old: rec {
                   propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ pysuper.gast ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyself.gast_5 ]);
@@ -591,13 +748,22 @@
                   #  sha256 = "sha256-BLgMcK07iuRPBJqQpLXGnf79KgRsTqygCSeusLqkfxc=";
                   #};
                 });
+                
+                scipy = pysuper.scipy.overridePythonAttrs (old: {
+                  doCheck = false;
+                });
+
+                # poetry - virtualenv - cython -> ModuleNotFoundError: No module named 'setuptools'
+                # pyparsing - setuptools - setuptools-scm -> error: infinite recursion encountered
+                #setuptools = pysuper.setuptools.overridePythonAttrs (old: {
+                #  buildInputs = [];
+                #});
                 setuptools = super.python3.pkgs.setuptools.overridePythonAttrs (old: {
                   catchConflicts = false;
                   format = "other";
                 });
-                scipy = pysuper.scipy.overridePythonAttrs (old: {
-                  doCheck = false;
-                });
+                # setuptools-scm = super.python3.pkgs.setuptools-scm; # With this, skipSetupToolsSCM in mk-poetry-dep.nix is not needed
+                
                 #tensorflow = pysuper.tensorflow.overridePythonAttrs ( old: {
                 #  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ pysuper.gast ]) ((old.nativeBuildInputs or [ ]) ++ [ pyself.wheel pyself.gast_4 ]);
                 #});
@@ -606,7 +772,12 @@
                 });
                 torch = torch_custom.override { enableCuda = true; };
                 # jupyterWith also uses six causing six package collision in closure
-                #six = self.python3.pkgs.six;
+                six = self.python3.pkgs.six;
+                #six = pysuper.six.overridePythonAttrs (old: rec {
+                #  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ pysuper.setuptools ]) ((old.nativeBuildInputs or [ ]) ++ [
+                #  ]);
+                #});
+
                 xarray-einstats = pysuper.xarray-einstats.overridePythonAttrs (old: {
                   buildInputs = (old.buildInputs or [ ]) ++ [ pyself.flit-core ];
                 });
@@ -675,89 +846,127 @@
                 #  doCheck = false;
                 #};
 
-                aesara =
-                  let
-                    wrapped = command: buildTop: buildInputs:
-                      self.runCommandCC "${command}-wrapped" { inherit buildInputs; } ''
-                        type -P '${command}' || { echo '${command}: not found'; exit 1; }
-                        cat > "$out" <<EOF
-                        #!$(type -P bash)
-                        $(declare -xp | sed -e '/^[^=]\+="\('"''${NIX_STORE//\//\\/}"'\|[^\/]\)/!d')
-                        declare -x NIX_BUILD_TOP="${buildTop}"
-                        $(type -P '${command}') "\$@"
-                        EOF
-                        chmod +x "$out"
-                      '';
+                #aesara =
+                #  let
+                #    blas = self.blas_custom; # not super.blas
+                #    lapack = self.lapack_custom; # not super.lapack
+                #    blasImplementation = nixpkgs.lib.nameFromURL blas.name "-";
+                #    cfg = super.writeTextFile {
+                #      name = "site.cfg";
+                #      text = (
+                #        nixpkgs.lib.generators.toINI
+                #          { }
+                #          {
+                #            ${blasImplementation} = {
+                #              include_dirs = "${blas}/include";
+                #              library_dirs = "${blas}/lib";
+                #            } // nixpkgs.lib.optionalAttrs (blasImplementation == "mkl") {
+                #              mkl_libs = "mkl_rt";
+                #              lapack_libs = "";
+                #            };
+                #          }
+                #      );
+                #    };
+                #    wrapped = command: buildTop: buildInputs:
+                #      self.runCommandCC "${command}-wrapped" { inherit buildInputs; } ''
+                #        type -P '${command}' || { echo '${command}: not found'; exit 1; }
+                #        cat > "$out" <<EOF
+                #        #!$(type -P bash)
+                #        $(declare -xp | sed -e '/^[^=]\+="\('"''${NIX_STORE//\//\\/}"'\|[^\/]\)/!d')
+                #        declare -x NIX_BUILD_TOP="${buildTop}"
+                #        $(type -P '${command}') "\$@"
+                #        EOF
+                #        chmod +x "$out"
+                #      '';
 
-                    # Theano spews warnings and disabled flags if the compiler isn't named g++
-                    cxx_compiler_name =
-                      if self.stdenv.cc.isGNU then "g++" else
-                      if self.stdenv.cc.isClang then "clang++" else
-                      throw "Unknown C++ compiler";
-                    cxx_compiler = wrapped cxx_compiler_name "\\$HOME/.theano"
-                      ([ self.cudaPackages_11_6.cudnn self.cudaPackages_11_6.cudatoolkit ]);
+                #    # Theano spews warnings and disabled flags if the compiler isn't named g++
+                #    cxx_compiler_name =
+                #      if self.stdenv.cc.isGNU then "g++" else
+                #      if self.stdenv.cc.isClang then "clang++" else
+                #      throw "Unknown C++ compiler";
+                #    cxx_compiler = wrapped cxx_compiler_name "\\$HOME/.theano"
+                #      ([ self.cudaPackages_11_6.cudnn self.cudaPackages_11_6.cudatoolkit ]);
 
-                  in
-                  pysuper.buildPythonPackage rec {
-                    postPatch = ''
-                      substituteInPlace aesara/configdefaults.py \
-                        --replace 'StrParam(param, is_valid=warn_cxx)' 'StrParam('\'''${cxx_compiler}'\''', is_valid=warn_cxx)' \
-                        --replace 'rc == 0 and config.cxx != ""' 'config.cxx != ""'
-                      substituteInPlace aesara/configdefaults.py \
-                        --replace 'StrParam(get_cuda_root)' 'StrParam('\'''${self.cudaPackages_11_6.cudatoolkit}'\''')'
-                      substituteInPlace aesara/configdefaults.py \
-                        --replace 'StrParam(default_dnn_base_path)' 'StrParam('\'''${self.cudaPackages_11_6.cudnn}'\''')'
-                    '';
+                #  in
+                #  #pysuper.buildPythonPackage rec {
+                #  pysuper.aesara.overrideAttrs (old: {
+                #    #$prePhases unpackPhase patchPhase $preConfigurePhases configurePhase $preBuildPhases buildPhase checkPhase $preInstallPhases installPhase fixupPhase installCheckPhase $preDistPhases distPhase $postPhases
+                #    #pname = "aesara";
+                #    #version = "2.6.6";
+                #    postPatch = ''
+                #      substituteInPlace aesara/configdefaults.py \
+                #        --replace 'StrParam(param, is_valid=warn_cxx)' 'StrParam('\'''${cxx_compiler}'\''', is_valid=warn_cxx)' \
+                #        --replace 'rc == 0 and config.cxx != ""' 'config.cxx != ""'
+                #      substituteInPlace aesara/configdefaults.py \
+                #        --replace 'StrParam(get_cuda_root)' 'StrParam('\'''${self.cudaPackages_11_6.cudatoolkit}'\''')'
+                #      substituteInPlace aesara/configdefaults.py \
+                #        --replace 'StrParam(default_dnn_base_path)' 'StrParam('\'''${self.cudaPackages_11_6.cudnn}'\''')'
+                #    '';
 
-                    # needs to be postFixup so it runs before pythonImportsCheck even when
-                    # doCheck = false (meaning preCheck would be disabled)
-                    postFixup = ''
-                      mkdir -p check-phase
-                      export HOME=$(pwd)/check-phase
-                    '';
-                    pname = "aesara";
-                    version = "2.4.0";
+                #    preBuild = ''
+                #      ln -s ${cfg} site.cfg
+                #    '';
 
-                    propagatedBuildInputs = [
-                      pyself.minikanren #miniKanren
-                      pyself.cons
+                #    # needs to be postFixup so it runs before pythonImportsCheck even when
+                #    # doCheck = false (meaning preCheck would be disabled)
+                #    postFixup = ''
+                #      mkdir -p check-phase
+                #      export HOME=$(pwd)/check-phase
+                #    '';
 
-                      pyself.numpy
-                      pyself.numpy.blas
-                      pyself.scipy
-                      pyself.filelock
+                #    buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [
+                #      blas
+                #      lapack
+                #    ]);
+                #    propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
+                #      blas
+                #      lapack
+                #      pyself.mkl-service
+                #    #  pyself.minikanren #miniKanren
+                #    #  pyself.cons
+                #    #  pyself.typing-extensions
 
-                      #pyself.libgpuarray
-                      pyself.setuptools
-                      #pyself.six
-                      pyself.pandas
-                      pyself.jaxlib
-                      self.cudaPackages_11_6.cudatoolkit
-                      self.cudaPackages_11_6.cudnn
-                    ];
+                #    #  pyself.numpy
+                #    #  pyself.numpy.blas
+                #    #  pyself.scipy
+                #    #  pyself.filelock
 
-                    src = pysuper.fetchPypi {
-                      inherit pname version;
-                      sha256 = "sha256-DkiJtJjw1nQC+6k5P/Gk5WruwsB8RfWu6fB6iPvJzWQ=";
-                    };
+                #    #  #pyself.libgpuarray
+                #    #  pyself.setuptools
+                #    #  #pyself.six
+                #    #  pyself.pandas
+                #    #  pyself.jaxlib
+                #    #  self.cudaPackages_11_6.cudatoolkit
+                #    #  self.cudaPackages_11_6.cudnn
+                #    ]);
+                #    #src = pysuper.fetchPypi {
+                #    #  inherit pname version;
+                #    #  sha256 = "sha256-wC7UW/j31NHKrH/8LSC1MN0fJtvtvUNax2ckRuJtGVA=";
+                #    #};
 
-                    doCheck = false;
-                  };
+                #    #doCheck = false;
+                #  });
 
-                aeppl = pysuper.buildPythonPackage rec {
-                  pname = "aeppl";
-                  version = "0.0.26";
+                #aeppl = pysuper.buildPythonPackage rec {
+                #  pname = "aeppl";
+                #  version = "0.0.26";
 
-                  propagatedBuildInputs = [ pyself.aesara ];
+                #  propagatedBuildInputs = [ pyself.aesara ];
 
-                  src = pysuper.fetchPypi {
-                    inherit pname version;
-                    sha256 = "sha256-wuX0qqXThMW/ftOBCT/qIVdwB6EQnPGgo5XYcVY+D5w=";
-                  };
+                #  src = pysuper.fetchPypi {
+                #    inherit pname version;
+                #    sha256 = "sha256-wuX0qqXThMW/ftOBCT/qIVdwB6EQnPGgo5XYcVY+D5w=";
+                #  };
 
-                  doCheck = false;
-                };
-
+                #  doCheck = false;
+                #};
+                ## pymc4
+                pymc = pysuper.pymc.overridePythonAttrs (old: rec {
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
+                    pyself.mkl-service
+                    #    pyself.aeppl
+                  ]);
+                });
                 pymc-nightly =
                   let
                     blas = self.blas_custom; # not super.blas
@@ -837,9 +1046,23 @@
 
                     checkInputs = with pysuper; [ pytest pytest-cov ];
                   };
+
+                pyzmq = pysuper.pyzmq.overridePythonAttrs (old: rec {
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
+                    pyself.packaging
+                    #    pyself.aeppl
+                  ]);
+                });
+                ###############################################################################################################
+
+                #tqdm = self.python3.pkgs.tqdm.overridePythonAttrs (old: rec {
+                #  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ pyself.toml ]);
+                #});
               });
           });
         })
+
+        #(poetry2nix_nix_community.overlay)
 
         #(final: pysuper: {
         #  # The application
@@ -853,7 +1076,7 @@
       ] ++ (builtins.attrValues jupyterWith.overlays)
         #++ [ dpaetzel.pymc4 ] 
       );
-    } // (flake-utils.lib.eachSystem [ "x86_64-linux" "x86_64-darwin" ] (system:
+    } // (flake-utils.lib.eachSystem [ "x86_64-linux" "x86_64-darwin" ] (system: # appending behind output
       rec
       {
         inherit pkgs python_custom;
@@ -861,15 +1084,13 @@
           type = "app";
           program = "${jupyterEnvironment}/bin/jupyter-lab";
         };
-        defaultApp = apps.jupyterlab;
-        packages.poetry = pkgs.poetry;
-        packages.mkl-service = python_custom.pkgs.mkl-service;
-        packages.mkl = pkgs.mkl;
-        packages.polynote = pkgs.polynote;
-        packages.jep = pkgs.python3.pkgs.jep;
+        packages.poetry = python_custom.pkgs.poetry; #python_custom_poetry.pkgs.poetry;
+        #packages.polynote = pkgs.polynote;
+        #packages.jep = pkgs.python3.pkgs.jep;
         packages.jupyterlab = jupyterEnvironment;
+        packages.pythonenv = python_custom;
 
-        defaultPackage = pkgs.poetry;
+        defaultPackage = python_custom.pkgs.poetry; #_poetry.pkgs.poetry;
         #devShell = python_test.env.overrideAttrs (old: {
         #  nativeBuildInputs = with pkgs; old.nativeBuildInputs ++ [
         #    jupyterEnvironment
@@ -884,31 +1105,32 @@
             # https://nixos.wiki/wiki/Packaging/Quirks_and_Caveats#ImportError:_libstdc.2B.2B.so.6:_cannot_open_shared_object_file:_No_such_file
             #stdenv.cc.cc.lib
             jupyterEnvironment
+            #python_custom_poetry.pkgs.poetry
             python_custom.pkgs.poetry
+            pkgs.graphviz
+            python_custom
+            python_custom.pkgs.kaggle
+
+            # polynote : go to polynote folder that has deps, notebooks folder and config.yml inside.
+            # run 'polynote'. current port in config.yml is 5555
+            #pkgs.polynote
+            #(pkgs.lib.getBin pkgs.graphviz)
             #(pkgs.lib.getBin pkgs.caffe)
             #(pkgs.lib.getBin python_custom)
 
             #iJulia.runtimePackages
           ];
-          buildInputs = [
-            # hostPlatform, usually build time
 
-            # polynote : go to polynote folder that has deps, notebooks folder and config.yml inside.
-            # run 'polynote'. current port in config.yml is 5555
-            pkgs.polynote 
-          ];
-          nativeBuildInputs = [
-            # hostPlatform, usually build time
-          ];
           #JULIA_DEPOT_PATH = "./.julia_depot";
 
-          shellHook = ''
-            export LD_LIBRARY_PATH=${pkgs.cudaPackages_11_6.cudatoolkit}/lib64:${pkgs.cudaPackages_11_6.cudnn}/lib:${pkgs.nvidia_custom}/lib:$LD_LIBRARY_PATH
+          shellHook = ''export LD_LIBRARY_PATH='' + LD_LIBRARY_PATH + ''
+            export TF_ENABLE_ONEDNN_OPTS=0 # when using GPU, oneDNN off is recommended 
           '';
         };
       }
     ));
 }
+
 # Initialize by 
 # $ nix shell nixpkgs#poetry
 # $ poetry init
@@ -924,3 +1146,55 @@
 # ssh -N -p7777 -L3333:localhost:3333 sepiabrown@snubayes.duckdns.org
 # 
 # nohup ssh -f -p 7777 -L 3333:localhost:3333 sepiabrown@snubayes.duckdns.org "./.cargo/bin/nix-user-chroot ~/.nix bash -l -c 'nix run ./MS-Thesis -- --port 3333'" > /dev/null
+#
+#$prePhases unpackPhase patchPhase $preConfigurePhases configurePhase $preBuildPhases buildPhase checkPhase $preInstallPhases installPhase fixupPhase installCheckPhase $preDistPhases distPhase $postPhases
+#
+# Library Path
+#   - old version : 
+#   export LD_LIBRARY_PATH=${pkgs.cudaPackages_11_6.cudatoolkit}/lib64:${pkgs.cudaPackages_11_6.cudatoolkit.lib}/lib:${pkgs.cudaPackages_11_6.cudnn}/lib:${pkgs.nvidia_custom}/lib:${nixpkgs.lib.makeLibraryPath [ pkgs.cudaPackages_11_6.cudatoolkit "${pkgs.cudaPackages_11_6.cudatoolkit}" ]}:$LD_LIBRARY_PATH
+#   - new version :
+#   export LD_LIBRARY_PATH=${nixpkgs.lib.makeLibraryPath [ pkgs.cudaPackages_11_6.cudatoolkit "${pkgs.cudaPackages_11_6.cudatoolkit}" pkgs.cudaPackages_11_6.cudnn pkgs.nvidia_custom ]}:$LD_LIBRARY_PATH
+# ${nixpkgs.lib.makeLibraryPath [ pkgs.cudaPackages_11_6.cudatoolkit ]} == ${pkgs.cudaPackages_11_6.cudatoolkit.lib}/lib
+# ${nixpkgs.lib.makeLibraryPath [ "${pkgs.cudaPackages_11_6.cudatoolkit}" ]} == ${pkgs.cudaPackages_11_6.cudatoolkit}/lib
+# 
+# Error Log
+#
+# - numpy error
+# error: builder for '/nix/store/4w7y08bmrz1acs3xxz7jmdqrvr0cgcg2-python3.9-numpy-1.21.5.drv' failed with exit code 1;
+#        last 10 log lines:
+#        >   Requested   : 'min'
+#        >   Enabled     : SSE SSE2 SSE3
+#        >   Flags       : -msse -msse2 -msse3
+#        >   Extra checks: none
+#        >
+#        > CPU dispatch  :
+#        >   Requested   : 'max -xop -fma4'
+#        >   Enabled     : SSSE3 SSE41 POPCNT SSE42 AVX F16C FMA3 AVX2 AVX512F AVX512CD AVX512_KNL AVX512_KNM AVX512_SKX AVX512_CLX AVX512_CNL AVX512_ICL
+#        >   Generated   : none
+#        > CCompilerOpt.cache_flush[809] : write cache to path -> /tmp/nix-build-python3.9-numpy-1.21.5.drv-0/numpy-1.21.5/build/temp.linux-x86_64-3.9/ccompiler_opt_cache_clib.py
+#        For full logs, run 'nix log /nix/store/4w7y08bmrz1acs3xxz7jmdqrvr0cgcg2-python3.9-numpy-1.21.5.drv'.
+# 
+# Solution : add pyself.numpy to nativeBuildInputs
+#                tqdm = pysuper.tqdm.overridePythonAttrs (old: rec {
+#                  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [  ]) ((old.nativeBuildInputs or [ ]) ++ [ pyself.numpy ]);
+#                });
+#
+# - Module not found error
+#   - Check whether file structure has changed
+#     - ex) poetry/__init__.py -> src/poetry/__init__.py -> Erased
+#
+# - When flake.lock is not updated
+# poetry cache clear pypi --all
+# 
+# - Updating src.json
+# nix-prefetch-url --unpack https://github.com/sepiabrown/poetry/archive/refs/heads/download_fix.tar.gz
+#
+# - infinite recursion
+# Packages that create '[[package]] name = "setuptools"' item in poetry.lock causes infinite recursion.
+# Solution : 
+# - Erase setuptools item in poetry.lock 
+# - Override setuptools with pkgs outside poetry2nix
+#   - poetry itself needs setuptools of poetry2nix so poetry needs to be overriden too
+#   - If setuptools-scm is also overriden, skipSetupToolsSCM in mk-poetry-dep.nix is not needed
+
+#
