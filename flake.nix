@@ -3,6 +3,7 @@
   inputs = {
     #nixpkgs_edge.url = "github:sepiabrown/nixpkgs/poetry_edge_test2";#test_mkl_on_server_echo1";#NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
     nixpkgs.url = "github:sepiabrown/nixpkgs/download_fix_220721"; #test_mkl_on_server_echo1";#NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
+    #nixpkgs_2111.url = "nixpkgs/nixos-21.11"; 
     #nixpkgs_2009.url = "nixpkgs/nixos-20.09"; # poetry doesn't work at nixos-20.09
     #nixpkgs_1703.url = "nixpkgs/1849e695b00a54cda86cb75202240d949c10c7ce"; # poetry doesn't work at nixos-20.09
     jupyterWith = {
@@ -18,6 +19,9 @@
       inputs.nixpkgs.follows = "nixpkgs";
     };
     dpaetzel.url = "github:dpaetzel/overlays/master";
+    nixgl = {
+      url = "github:sepiabrown/nixGL";
+    };
   };
 
   outputs = inputs: with inputs; # inputs@{ self, nixpkgs, jupyterWith, flake-utils, dpaetzel, ... }:
@@ -312,6 +316,12 @@
                       --replace "int MKL_ENABLE_AVX2_E1" " "
                   '';
                 });
+                # numba needs setuptools<60 but jupyter-packaging needs setuptools>=60
+                #numba = pyprev.numba.override {
+                #  setuptools = nixpkgs_2111.legacyPackages.x86_64-linux.python39.pkgs.setuptools;
+                #};
+
+
                 numpy = pyprev.numpy.overridePythonAttrs (old:
                   let
                     blas = final.mkl; # not prev.blas
@@ -534,22 +544,6 @@
                   doCheck = false;
                 });
 
-                # poetry - virtualenv - cython -> ModuleNotFoundError: No module named 'setuptools'
-                # pyparsing - setuptools - setuptools-scm -> error: infinite recursion encountered
-                #setuptools = pyprev.setuptools.overridePythonAttrs (old: {
-                #  buildInputs = [];
-                #});
-                setuptools = pyfinal.python_selected.pkgs.setuptools.overridePythonAttrs (old: {
-                  catchConflicts = false;
-                  format = "other";
-                });
-                # With this, skipSetupToolsSCM in mk-poetry-dep.nix is not needed
-                setuptools-scm = pyfinal.python_selected.pkgs.setuptools-scm.override {
-                  inherit (pyfinal)
-                    packaging
-                    tomli
-                    setuptools;
-                };
 
                 tensorflow-gpu = pyprev.tensorflow-gpu.overridePythonAttrs (old: {
                   buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ pyfinal.tensorboard ]);
@@ -789,6 +783,46 @@
 
                 ############################################################################################
 
+                # poetry - virtualenv - cython -> ModuleNotFoundError: No module named 'setuptools'
+                # pyparsing - setuptools - setuptools-scm -> error: infinite recursion encountered
+                setuptools = (pyfinal.python_selected.pkgs.setuptools.overridePythonAttrs (old: {
+                  catchConflicts = false;
+                  format = "other";
+                })).override {
+                  inherit (pyfinal)
+                    bootstrapped-pip
+                    pipInstallHook;
+                    #setuptoolsBuildHook
+                };
+                # With this, skipSetupToolsSCM in mk-poetry-dep.nix is not needed
+                setuptools-scm = pyfinal.python_selected.pkgs.setuptools-scm.override {
+                  inherit (pyfinal)
+                    packaging
+                    tomli
+                    #typing-extensions
+                    setuptools;
+                };
+
+                # nbdev <- fastcore, ghapi dependency : stack overflow (possible infinite recursion)
+                pip = pyfinal.python_selected.pkgs.pip.override {
+                  inherit (pyfinal)
+                    bootstrapped-pip
+                    mock
+                    scripttest
+                    virtualenv
+                    pretend
+                    pytest
+                    pip-tools;
+                };
+
+                PyTDC = pyprev.pytdc;
+
+                quarto = pyprev.quarto.override {
+                  preferWheel = true;
+                };
+
+                rdkit = pyprev.rdkit-pypi;
+
                 jupyter_core = pyfinal.python_selected.pkgs.jupyter_core.override {
                   inherit (pyfinal)
                     ipython
@@ -912,7 +946,7 @@
         ++ [
         (final: prev: {
           jupyterWith_python_custom = final.jupyterWith.override {
-            python3 = self.python_custom.x86_64-linux.pkgs;
+            python3 = self.python_custom.x86_64-linux;
             #python3 = self.python_custom.x86_64-linux.pkgs.python39.pkgs;
           };
         })
@@ -1011,32 +1045,115 @@
           type = "app";
           program = "${jupyterEnvironment}/bin/jupyter-lab";
         };
+        packages.default = packages.poetry;
         packages.poetry = python_custom.pkgs.poetry;
+        packages.jupyterlab = jupyterEnvironment;
+        packages.nbdev = python_custom.pkgs.nbdev;
         #packages.polynote = pkgs.polynote;
         #packages.jep = pkgs.python3.pkgs.jep;
-        packages.jupyterlab = jupyterEnvironment;
-        packages.pythonenv = python_custom;
+        #packages.pythonenv = python_custom;
+        
+        packages.quarto-cli = pkgs.stdenv.mkDerivation rec {
+          pname = "quarto-cli";
+          version = "1.1.189";
 
-        defaultPackage = packages.poetry;
-        #devShell = python_test.env.overrideAttrs (old: {
-        #  nativeBuildInputs = with pkgs; old.nativeBuildInputs ++ [
-        #    jupyterEnvironment
-        #    poetry
-        #    (lib.getBin caffe)
+          src = builtins.fetchurl {
+            url = "https://github.com/quarto-dev/${pname}/releases/download/v${version}/quarto-${version}-linux-amd64.tar.gz";
+            sha256 = "1a3xsgqdccm4ky1xjnin1idpp8gsansskq37c00mrxz1raxn1mi7";
+          };
+
+          nativeBuildInputs = [
+            pkgs.makeWrapper
+          ];
+
+          buildInputs = [
+            pkgs.pandoc
+            pkgs.deno
+            pkgs.esbuild
+            pkgs.nodePackages.sass
+          ];
+
+          patches = [
+            (pkgs.substituteAll {
+              src = ./fix-deno-path.patch;
+              #deno = "${nixpkgs.lib.makeBinPath [ pkgs.deno ]}/deno"; #"${pkgs.deno}/bin/deno"
+              #sass = "${nixpkgs.lib.makeBinPath [ pkgs.nodePackages.sass ]}/sass";
+            })
+          ];
+
+          preFixup = ''
+            wrapProgram $out/bin/quarto --prefix PATH : ${nixpkgs.lib.makeBinPath [ pkgs.deno ]};
+            wrapProgram $out/bin/quarto --prefix QUARTO_PANDOC : ${nixpkgs.lib.makeBinPath [ pkgs.pandoc ]}/pandoc;
+            wrapProgram $out/bin/quarto --prefix QUARTO_ESBUILD : ${nixpkgs.lib.makeBinPath [ pkgs.esbuild ]}/esbuild;
+            wrapProgram $out/bin/quarto --prefix QUARTO_DART_SASS : ${nixpkgs.lib.makeBinPath [ pkgs.nodePackages.sass ]}/sass;
+          '';
+
+          installPhase = ''
+            runHook preInstall
+
+            mkdir -p $out/{bin,share}
+            rm -r bin/tools
+            mv bin/vendor/import_map.json bin
+            rm -r bin/vendor
+            
+            mv bin/* $out/bin
+            mv share/* $out/share
+
+            runHook postInstall
+          '';
+        };
+        #nativeBuildInputs = [
+        #  pkgs.dpkg
+        #  pkgs.autoPatchelfHook
+        #];
+        #unpackCmd = "dpkg-deb -x $curSrc .";
+        
+        #devShells.quarto = pkgs.mkShell rec {
+        #  packages = [
+        #    self.packages.${system}.quarto-cli
         #  ];
-        #});
-        devShell = pkgs.mkShell rec {
+
+        #  #JULIA_DEPOT_PATH = "./.julia_depot";
+
+        #  shellHook = ''export LD_LIBRARY_PATH='' + LD_LIBRARY_PATH + ''
+        #    export TF_ENABLE_ONEDNN_OPTS=0 # when using GPU, oneDNN off is recommended 
+        #  '';
+        #};
+        #devShells.nbdev = pkgs.mkShell rec {
+        #  packages = [
+        #    jupyterEnvironment
+        #    python_custom.pkgs.nbdev
+        #  ];
+
+        #  #JULIA_DEPOT_PATH = "./.julia_depot";
+
+        #  shellHook = ''export LD_LIBRARY_PATH='' + LD_LIBRARY_PATH + ''
+        #    export TF_ENABLE_ONEDNN_OPTS=0 # when using GPU, oneDNN off is recommended 
+        #  '';
+        #};
+
+        devShells.default = pkgs.mkShell rec {
           packages = [
             # stdenv reference :
             # https://discourse.nixos.org/t/nixos-with-poetry-installed-pandas-libstdc-so-6-cannot-open-shared-object-file/8442/3
             # https://nixos.wiki/wiki/Packaging/Quirks_and_Caveats#ImportError:_libstdc.2B.2B.so.6:_cannot_open_shared_object_file:_No_such_file
             #stdenv.cc.cc.lib
             jupyterEnvironment
+            #python_custom
             python_custom.pkgs.poetry
-            pkgs.graphviz
-            python_custom
+            python_custom.pkgs.nbdev
+            #python_custom.pkgs.quarto
             python_custom.pkgs.kaggle
+            pkgs.graphviz
 
+            self.packages.${system}.quarto-cli
+
+            nixgl.defaultPackage.${system}
+            pkgs.linuxPackages.nvidia_x11
+
+            pkgs.nvtop
+            pkgs.deno
+            pkgs.lldb
             # polynote : go to polynote folder that has deps, notebooks folder and config.yml inside.
             # run 'polynote'. current port in config.yml is 5555
             #pkgs.polynote
@@ -1210,3 +1327,9 @@
 # Solution :
 # - `jupyter-core` and `jupyter_core` were recognised as a different entity 
 # - Set `jupyter-core = pyfinal.jupyter_core`
+#
+# error: stack overflow (possible infinite recursion)
+#
+# Solution :
+# - Use `pyfinal.python_selected.pkgs.XXXX.override`
+# - Examples : setuptools, setuptools-scm, pip

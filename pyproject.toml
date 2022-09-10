@@ -10,12 +10,6 @@ python = "~3.9"
 #hatchling = "0.25.1" # 1.0.0 not working
 #packaging = "^21.3" # statsmodels #"^20.0" # matplotlib
 
-# Test
-#deprecation = "2.1.0"
-#tomli = "2.0.1" # unknown package needs 2.0.1? flit?
-#flit = "3.7.1"
-#tqdm = "^4.64.0"
-
 ## Safe from infinite recursion
 scikit-learn = "^1.1.1"
 keras = "^2.8.0"
@@ -42,7 +36,7 @@ jedi = ">=0.18.1"
 jep = "4.0.0"
 jsonschema = "4.6.0"
 virtualenv = "*"
-nbconvert = "*"
+nbconvert = "6.5.0"
 
 # Packages that creates setuptools item in poetry.lock 
 # (either directly or through other dependencies)
@@ -65,7 +59,9 @@ ipython = "*"
 pyro-ppl = "^1.8.0" # error: Missing suitable source/wheel file entry for torch
 torch = {version = "1.11.0+cu115", source = "torchWithCuda"}
 torchvision = { version = "^0.12.0", source = "pypi"} # needs explicit : scipy
-
+#dgl = "cu115-0.9.0"
+dgl-cu115 = { path = "dgl_cu115-0.9.0-cp39-cp39-manylinux1_x86_64.whl"}
+#dgl-cu115 = { url = "https://data.dgl.ai/wheels/dgl_cu115-0.9.0-cp39-cp39-manylinux1_x86_64.whl" }
 # Not using at the moment
 #pymc3 = "^3.11.4"
 #Theano = "1.0.5"
@@ -82,6 +78,31 @@ torchvision = { version = "^0.12.0", source = "pypi"} # needs explicit : scipy
 #markers = "platform_system == 'Linux'"
 #url = "https://download.pytorch.org/whl/cu115/torch-1.11.0%2Bcu115-cp39-cp39-linux_x86_64.whl"
 
+###########################
+# Test
+#deprecation = "2.1.0"
+#tomli = "2.0.1" # unknown package needs 2.0.1? flit?
+#flit = "3.7.1"
+#tqdm = "^4.64.0"
+#numba = "^0.56.0"
+py3nvml = "^0.2.7"
+multiprocess = "^0.70.13"
+ray = "^1.13.0"
+pydot = "^1.4.2"
+#opencv-python = "4.5.4" #"^4.5.4"
+#transformers = "4.16.2" # "4.16.2" 
+missingno = "^0.5.1"
+wordcloud = "^1.8.2.2"
+imblearn = "^0.0"
+robobrowser = "^0.5.3"
+plotly = "5.6.0"
+rdkit = "^2022.3.5"
+PyTDC = "^0.3.6"
+nbdev = "^2.2.10"
+pip = "22.1.2"
+# pip needed by fastcore, ghapi which are needed by nbdev
+quarto = "^0.1.0"
+
 [[tool.poetry.source]]
 name = "torchWithCuda"
 # ex) url = "https://download.pytorch.org/whl/cu115/torch-1.11.0%2Bcu115-cp39-cp39-linux_x86_64.whl"
@@ -89,6 +110,13 @@ url = "https://download.pytorch.org/whl/cu115"
 # Solution: secondary = true, default with no option 
 #secondary = true
 
+#[[tool.poetry.source]]
+#name = "dgl"
+# ex) url = "https://download.pytorch.org/whl/cu115/torch-1.11.0%2Bcu115-cp39-cp39-linux_x86_64.whl"
+#url = "https://data.dgl.ai/wheels"
+# Solution: secondary = true, default with no option 
+
+#secondary = true
 [tool.poetry.dev-dependencies]
 
 [build-system]
