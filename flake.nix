@@ -2,7 +2,8 @@
   description = "MS thesis environment";
   inputs = {
     #nixpkgs_edge.url = "github:sepiabrown/nixpkgs/poetry_edge_test2";#test_mkl_on_server_echo1";#NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
-    nixpkgs.url = "github:sepiabrown/nixpkgs/download_fix_220721"; #test_mkl_on_server_echo1";#NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
+    #nixpkgs.url = "github:sepiabrown/nixpkgs/download_fix_220721"; #test_mkl_on_server_echo1";#NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
+    nixpkgs.url = "nixpkgs/nixos-22.05"; 
     #nixpkgs_2111.url = "nixpkgs/nixos-21.11"; 
     #nixpkgs_2009.url = "nixpkgs/nixos-20.09"; # poetry doesn't work at nixos-20.09
     #nixpkgs_1703.url = "nixpkgs/1849e695b00a54cda86cb75202240d949c10c7ce"; # poetry doesn't work at nixos-20.09
@@ -62,97 +63,100 @@
           poetry2nix = prev.poetry2nix.overrideScope' (p2nixfinal: p2nixprev: {
             # pyfinal & pyprev refers to python packages
             defaultPoetryOverrides = (p2nixprev.defaultPoetryOverrides.extend (pyfinal: pyprev:
-              let
-                torch_custom = nixpkgs.lib.makeOverridable
-                  (
-                    { enableCuda ? true
-                    , cudaPackages ? final.cudaPackages #, cudatoolkit ? pkgs.cudatoolkit_10_1
-                    , cudaArchList ? null
-                    , pkg ? pyprev.torch
-                    }:
-                    let
-                      inherit (cudaPackages) cudatoolkit cudnn nccl cuda_nvcc;
+              #let
+              #  torch_custom = nixpkgs.lib.makeOverridable
+              #    (
+              #      { enableCuda ? true
+              #      , cudaPackages ? final.cudaPackages #, cudatoolkit ? pkgs.cudatoolkit_10_1
+              #      , cudaArchList ? null
+              #      , pkg ? pyprev.torch
+              #      }:
+              #      let
+              #        inherit (cudaPackages) cudatoolkit cudnn nccl cuda_nvcc;
 
-                      cudatoolkit_joined = final.symlinkJoin {
-                        name = "${cudatoolkit.name}-unsplit";
-                        # nccl is here purely for semantic grouping it could be moved to nativeBuildInputs
-                        paths = [ cudatoolkit.out cudatoolkit.lib nccl.dev nccl.out ];
-                      };
+              #        cudatoolkit_joined = final.symlinkJoin {
+              #          name = "${cudatoolkit.name}-unsplit";
+              #          # nccl is here purely for semantic grouping it could be moved to nativeBuildInputs
+              #          paths = [ cudatoolkit.out cudatoolkit.lib nccl.dev nccl.out ];
+              #        };
 
-                      cudaCapabilities = rec {
-                        cuda9 = [
-                          "3.5"
-                          "5.0"
-                          "5.2"
-                          "6.0"
-                          "6.1"
-                          "7.0"
-                          "7.0+PTX" # I am getting a "undefined architecture compute_75" on cuda 9
-                          # which leads me to believe this is the final cuda-9-compatible architecture.
-                        ];
+              #        cudaCapabilities = rec {
+              #          cuda9 = [
+              #            "3.5"
+              #            "5.0"
+              #            "5.2"
+              #            "6.0"
+              #            "6.1"
+              #            "7.0"
+              #            "7.0+PTX" # I am getting a "undefined architecture compute_75" on cuda 9
+              #            # which leads me to believe this is the final cuda-9-compatible architecture.
+              #          ];
 
-                        cuda10 = cuda9 ++ [
-                          "7.5"
-                          "7.5+PTX" # < most recent architecture as of cudatoolkit_10_0 and pytorch-1.2.0
-                        ];
+              #          cuda10 = cuda9 ++ [
+              #            "7.5"
+              #            "7.5+PTX" # < most recent architecture as of cudatoolkit_10_0 and pytorch-1.2.0
+              #          ];
 
-                        cuda11 = cuda10 ++ [
-                          "8.0"
-                          "8.0+PTX" # < CUDA toolkit 11.0
-                          "8.6"
-                          "8.6+PTX" # < CUDA toolkit 11.1
-                        ];
-                      };
-                      final_cudaArchList =
-                        if !enableCuda || cudaArchList != null
-                        then cudaArchList
-                        else cudaCapabilities."cuda${nixpkgs.lib.versions.major cudatoolkit.version}";
-                    in
-                    pkg.overrideAttrs (old: {
-                      src_test = old.src;
+              #          cuda11 = cuda10 ++ [
+              #            "8.0"
+              #            "8.0+PTX" # < CUDA toolkit 11.0
+              #            "8.6"
+              #            "8.6+PTX" # < CUDA toolkit 11.1
+              #          ];
+              #        };
+              #        final_cudaArchList =
+              #          if !enableCuda || cudaArchList != null
+              #          then cudaArchList
+              #          else cudaCapabilities."cuda${nixpkgs.lib.versions.major cudatoolkit.version}";
+              #      in
+              #      pkg.overrideAttrs (old: {
+              #        src_test = old.src;
+              #        preferWheels = true;
+              #        dontStrip = false;
+              #        format = "wheels";
 
-                      preConfigure = nixpkgs.lib.optionalString (!enableCuda) ''
-                        export USE_CUDA=0
-                      '' + nixpkgs.lib.optionalString enableCuda ''
-                        export TORCH_CUDA_ARCH_LIST="${nixpkgs.lib.strings.concatStringsSep ";" final_cudaArchList}"
-                        export CC=${cudatoolkit.cc}/bin/gcc CXX=${cudatoolkit.cc}/bin/g++
-                      '' + ''export LD_LIBRARY_PATH='' + LD_LIBRARY_PATH +
-                      nixpkgs.lib.optionalString (enableCuda && cudnn != null) ''
-                        export CUDNN_INCLUDE_DIR=${cudnn}/include
-                      ''; # enableCuda ${cudatoolkit}/targets/x86_64-linux/lib
+              #        preConfigure = nixpkgs.lib.optionalString (!enableCuda) ''
+              #          export USE_CUDA=0
+              #        '' + nixpkgs.lib.optionalString enableCuda ''
+              #          export TORCH_CUDA_ARCH_LIST="${nixpkgs.lib.strings.concatStringsSep ";" final_cudaArchList}"
+              #          export CC=${cudatoolkit.cc}/bin/gcc CXX=${cudatoolkit.cc}/bin/g++
+              #        '' + ''export LD_LIBRARY_PATH='' + LD_LIBRARY_PATH +
+              #        nixpkgs.lib.optionalString (enableCuda && cudnn != null) ''
+              #          export CUDNN_INCLUDE_DIR=${cudnn}/include
+              #        ''; # enableCuda ${cudatoolkit}/targets/x86_64-linux/lib
 
-                      # patchelf --set-rpath "${lib.makeLibraryPath [ stdenv.cc.cc.lib ]}"
-                      preFixup = nixpkgs.lib.optionalString (!enableCuda) ''
-                        # For some reason pytorch retains a reference to libcuda even if it
-                        # is explicitly disabled with USE_CUDA=0.
-                        find $out -name "*.so" -exec ${nixpkgs.patchelf}/bin/patchelf --remove-needed libcuda.so.1 {} \;
-                      '';
-                      nativeBuildInputs =
-                        (old.nativeBuildInputs or [ ])
-                        ++ [ final.autoPatchelfHook ]
-                        ++ nixpkgs.lib.optionals enableCuda [ cudatoolkit_joined final.addOpenGLRunpath ];
-                      buildInputs =
-                        (old.buildInputs or [ ])
-                        ++ [ pyfinal.typing-extensions pyfinal.pyyaml ]
-                        ++ nixpkgs.lib.optionals enableCuda [
-                          final.nvidia_custom
-                          nccl.dev
-                          nccl.out
-                          cudatoolkit
-                          cudnn
-                          cuda_nvcc
-                          final.magma
-                          nccl
-                        ];
-                      propagatedBuildInputs = [
-                        pyfinal.numpy
-                        pyfinal.future
-                        pyfinal.typing-extensions
-                      ];
-                    })
-                  )
-                  { };
-              in
+              #        # patchelf --set-rpath "${lib.makeLibraryPath [ stdenv.cc.cc.lib ]}"
+              #        preFixup = nixpkgs.lib.optionalString (!enableCuda) ''
+              #          # For some reason pytorch retains a reference to libcuda even if it
+              #          # is explicitly disabled with USE_CUDA=0.
+              #          find $out -name "*.so" -exec ${nixpkgs.patchelf}/bin/patchelf --remove-needed libcuda.so.1 {} \;
+              #        '';
+              #        nativeBuildInputs =
+              #          (old.nativeBuildInputs or [ ])
+              #          ++ [ final.autoPatchelfHook ]
+              #          ++ nixpkgs.lib.optionals enableCuda [ cudatoolkit_joined final.addOpenGLRunpath ];
+              #        buildInputs =
+              #          (old.buildInputs or [ ])
+              #          ++ [ pyfinal.typing-extensions pyfinal.pyyaml ]
+              #          ++ nixpkgs.lib.optionals enableCuda [
+              #            final.nvidia_custom
+              #            nccl.dev
+              #            nccl.out
+              #            cudatoolkit
+              #            cudnn
+              #            cuda_nvcc
+              #            final.magma
+              #            nccl
+              #          ];
+              #        propagatedBuildInputs = [
+              #          pyfinal.numpy
+              #          pyfinal.future
+              #          pyfinal.typing-extensions
+              #        ];
+              #      })
+              #    )
+              #    { };
+              #in
               {
                 #importlib-metadata = pyprev.importlib-metadata.overridePythonAttrs ( old: {
                 #  format = "pyproject";
@@ -179,6 +183,7 @@
                 cython = pyprev.cython.overridePythonAttrs (old: rec {
                   propagatedBuildInputs = [ pyfinal.setuptools ];
                 });
+                Cython = pyfinal.cython;
 
                 gast_5 = pyprev.gast.overridePythonAttrs (old: rec {
                   pname = "gast";
@@ -273,6 +278,8 @@
                     #"--set AESARA_FLAGS device=cuda0,dnn__base_path=${final.cudaPackages_11_6.cudnn},blas__ldflags=-lblas,dnn__library_path=${final.cudaPackages_11_6.cudnn}/lib,dnn__include_path=${final.cudaPackages_11_6.cudnn}/include"#${nixpkgs.lib.makeLibraryPath [ final.cudaPackages.cudnn ]}" #,cuda__root=${final.cudaPackages_11_6.cudatoolkit}
                     #"--set CUDA_HOME ${final.cudaPackages_11_6.cudatoolkit}"
                     #"--set CUDA_INC_DIR ${final.cudaPackages_11_6.cudatoolkit}/include"
+          #export CUDA_PATH=${pkgs.cudatoolkit}
+          #export LD_LIBRARY_PATH=${pkgs.linuxPackages.nvidia_x11}/lib:${pkgs.ncurses5}/lib
                   ];
                 });
                 jsonschema = pyprev.jsonschema.overridePythonAttrs (old: rec {
@@ -364,8 +371,8 @@
                 #  ]);
                 #});
                 poetry-core = pyprev.poetry-core.overridePythonAttrs (old: rec {
-                  # 1.2.0b1
-                  version = "1.1.0b3";
+                  # poetry 1.2.0b1
+                  version = "1.1.0b3"; # poetry-core version is different from poetry
                   src = final.fetchFromGitHub {
                     owner = "python-poetry";
                     repo = "poetry-core";
@@ -544,16 +551,22 @@
                   doCheck = false;
                 });
 
-
-                tensorflow-gpu = pyprev.tensorflow-gpu.overridePythonAttrs (old: {
-                  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ pyfinal.tensorboard ]);
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ pyprev.tensorboard ]) ((old.propagatedBuildInputs or [ ]) ++ [ ]); # pyprev.gast pyfinal.gast_4 
-                });
+                tensorflow-gpu = pyprev.tensorflow.override {
+                  cudaSupport = true;
+                  mklSupport = true;
+                  mkl = final.mkl;
+                };
+                #= pyprev.tensorflow-gpu.overridePythonAttrs (old: { # tensorflow-gpu doesn't exist! Always search at hound!
+                #  #buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ pyfinal.tensorboard ]);
+                #  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ pyfinal.tensorboard ]);
+                #  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ pyprev.tensorboard ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.wheel ]); # pyprev.gast pyfinal.gast_4 
+                #});
 
                 tensorflow-io-gcs-filesystem = pyprev.tensorflow-io-gcs-filesystem.overridePythonAttrs (old: {
                   propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.numpy ]);
                   buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ final.libtensorflow ]);
                 });
+
                 # needed for pymc3
                 theano-pymc = pyprev.theano-pymc.overridePythonAttrs (old:
                   let
@@ -621,8 +634,6 @@
                       final.cudaPackages_11_6.cudnn
                     ];
                   });
-
-                torch = torch_custom.override { enableCuda = true; };
 
                 traitlets = pyprev.traitlets.overridePythonAttrs (old: {
                   propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ [ pyfinal.hatchling pyfinal.numpy ];
@@ -785,6 +796,18 @@
 
                 # poetry - virtualenv - cython -> ModuleNotFoundError: No module named 'setuptools'
                 # pyparsing - setuptools - setuptools-scm -> error: infinite recursion encountered
+                #nbformat = pyfinal.python_selected.pkgs.nbformat.override {
+                #  inherit (pyfinal)
+                #    pytest
+                #    ipython_genutils
+                #    testpath
+                #    jsonschema
+                #    jupyter_core
+                #    ;
+                #};
+                nbformat = pyprev.nbformat.overridePythonAttrs (old: {
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.flit-core ]);
+                });
                 setuptools = (pyfinal.python_selected.pkgs.setuptools.overridePythonAttrs (old: {
                   catchConflicts = false;
                   format = "other";
@@ -815,6 +838,56 @@
                     pip-tools;
                 };
 
+                nbdev = pyprev.nbdev.overridePythonAttrs (old: rec {
+                  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [
+                    pyfinal.twine
+                  ]);
+                  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [
+                    pyfinal.twine
+                  ]);
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
+                    pyfinal.twine
+                  ]);
+                  propagatedNativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedNativeBuildInputs or [ ]) ++ [
+                    pyfinal.twine
+                  ]);
+                });
+
+                #fastcore = pyfinal.python_selected.pkgs.fastcore.override {
+                #  inherit (pyfinal)
+                #    ipython
+                #    traitlets
+                #    mock
+                #    pytestCheckHook
+                #    nose
+                #  ;
+                #};
+                #ghapi = pyfinal.python_selected.pkgs.ghapi.override {
+                #  inherit (pyfinal)
+                #    ipython
+                #    traitlets
+                #    mock
+                #    pytestCheckHook
+                #    nose
+                #  ;
+                #};
+
+                # matplotlib : lib.optional should be fixed to lib.optionals
+                matplotlib = pyprev.matplotlib.overridePythonAttrs (old: rec {
+                  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ 
+                    pyfinal.setuptools-scm
+                    pyfinal.setuptools-scm-git-archive
+                  ]);
+                });
+                contourpy = pyprev.contourpy.overridePythonAttrs (old: rec {
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.pybind11 ]);
+                });
+
+                # needed by requests needed by twine
+                idna = pyprev.idna.overridePythonAttrs (old: rec {
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.flit-core ]);
+                });
+
                 PyTDC = pyprev.pytdc;
 
                 quarto = pyprev.quarto.override {
@@ -833,16 +906,48 @@
                   ;
                 };
                 jupyter-core = pyfinal.jupyter_core; # Not pyprev!!
-                #nbformat = pyfinal.python_selected.pkgs.nbformat.override {
-                #  inherit (pyfinal)
-                #    pytest
-                #    ipython_genutils
-                #    testpath
-                #    jsonschema
-                #    jupyter_core
-                #    ;
-                #};
+                termcolor = pyprev.termcolor.overridePythonAttrs (old: rec {
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
+                    pyfinal.hatchling
+                    # 'hatchling.build' has no attribute 'prepare_metadata_for_build_wheel': needs hatch-vcs not importlib-metadata
+                    pyfinal.hatch-vcs
+                  ]);
+                });
 
+                torch = (pyfinal.python_selected.pkgs.pytorch.override {
+                  cudaSupport = true;
+                  MPISupport = true;
+                  blas = final.blas_custom;
+                  cudaPackages = final.cudaPackages_11_6;
+                  inherit (final)
+                    magma
+                    mpi
+                  ;
+                  inherit (pyfinal)
+                    # Native build inputs
+                    pybind11
+                    # Propagated build inputs
+                    numpy
+                    pyyaml
+                    cffi
+                    click
+                    typing-extensions
+                    # Unit tests
+                    hypothesis
+                    psutil
+                    # dependencies for torch.utils.tensorboard
+                    pillow
+                    six
+                    future
+                    tensorboard
+                    protobuf
+                  ;
+                }).overridePythonAttrs (old: rec {
+                  USE_SYSTEM_BIND11 = true;
+                  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [
+                    pyfinal.pybind11
+                  ]);
+                });
                 xgboost = pyfinal.python_selected.pkgs.xgboost.override {
                   inherit (pyfinal)
                     pytestCheckHook
@@ -962,9 +1067,13 @@
           overlays = [ self.overlay ];
           #overlays = (builtins.attrValues jupyterWith.overlays) ++ [ self.overlay ]; # [ (import ./haskell-overlay.nix) ];
         };
+
         python_custom = pkgs.poetry2nix.mkPoetryEnv rec {
           projectDir = ./.;
           python = pkgs.python39;
+          editablePackageSources = {
+            mypackages = ~/Jupyter_Python; #./.; not working
+          };
           #extraPackages = ps: [ ps.pytorch_custom2 ];
           #editablePackageSources = {
           #  ronald_bdl = "${builtins.getEnv "HOME"}/MS-Thesis/my-python-package/ronald_bdl";
@@ -1007,10 +1116,18 @@
             let
               # Building the local package using the standard way.
               myPythonPackage = p.buildPythonPackage {
-                pname = "my-python-package";
-                version = "0.2.0";
+                pname = "MyPythonPackage";
+                version = "1.0";
                 src = ./my-python-package;
               };
+              #myPythonPackage = p.buildPythonPackage {
+              #  pname = "nbdev-cards";
+              #  version = "0.0.1";
+              #  src = ./nbdev_cards;
+              #  buildInputs = [
+              #    p.fastcore
+              #  ];
+              #};
               # Getting dependencies using Poetry.
               poetryDeps =
                 builtins.map (name: builtins.getAttr name p) depNames;
@@ -1041,51 +1158,53 @@
         #  nvidiaHash = "08yln39l82fi5hmn06xxi3sl6zb4fgshhhq3m42ksiglradjd0ah";
         #  inherit pkgs;
         #}).nixGLNvidia;
-        apps.jupyterlab = {
+        apps.jupyter-lab = {
           type = "app";
           program = "${jupyterEnvironment}/bin/jupyter-lab";
         };
+        apps.jupyter-notebook = {
+          type = "app";
+          program = "${python_custom.pkgs.notebook}/bin/jupyter-notebook";
+        };
+        apps.jupyter-notebookk = {
+          type = "app";
+          program = "${python_custom.pkgs.notebook}/bin/jupyter-notebook";
+        };
         packages.default = packages.poetry;
         packages.poetry = python_custom.pkgs.poetry;
-        packages.jupyterlab = jupyterEnvironment;
+        #packages.jupyterlab = jupyterEnvironment;
         packages.nbdev = python_custom.pkgs.nbdev;
+          #source ${pkgs.writeShellScriptBin "export" ''
+          #  ''}/bin/export
+          #exec ${python_custom.pkgs.nbdev}/bin/nbdev_preview --port 3334
         #packages.polynote = pkgs.polynote;
         #packages.jep = pkgs.python3.pkgs.jep;
         #packages.pythonenv = python_custom;
         
-        packages.quarto-cli = pkgs.stdenv.mkDerivation rec {
-          pname = "quarto-cli";
+        packages.quarto = with builtins; with nixpkgs; with pkgs; stdenv.mkDerivation rec {
+          pname = "quarto";
           version = "1.1.189";
 
-          src = builtins.fetchurl {
-            url = "https://github.com/quarto-dev/${pname}/releases/download/v${version}/quarto-${version}-linux-amd64.tar.gz";
+          src = fetchurl {
+            url = "https://github.com/quarto-dev/quarto-cli/releases/download/v${version}/quarto-${version}-linux-amd64.tar.gz";
             sha256 = "1a3xsgqdccm4ky1xjnin1idpp8gsansskq37c00mrxz1raxn1mi7";
           };
 
           nativeBuildInputs = [
-            pkgs.makeWrapper
-          ];
-
-          buildInputs = [
-            pkgs.pandoc
-            pkgs.deno
-            pkgs.esbuild
-            pkgs.nodePackages.sass
+            makeWrapper
           ];
 
           patches = [
-            (pkgs.substituteAll {
-              src = ./fix-deno-path.patch;
-              #deno = "${nixpkgs.lib.makeBinPath [ pkgs.deno ]}/deno"; #"${pkgs.deno}/bin/deno"
-              #sass = "${nixpkgs.lib.makeBinPath [ pkgs.nodePackages.sass ]}/sass";
-            })
+              ./fix-deno-path.patch
           ];
 
           preFixup = ''
-            wrapProgram $out/bin/quarto --prefix PATH : ${nixpkgs.lib.makeBinPath [ pkgs.deno ]};
-            wrapProgram $out/bin/quarto --prefix QUARTO_PANDOC : ${nixpkgs.lib.makeBinPath [ pkgs.pandoc ]}/pandoc;
-            wrapProgram $out/bin/quarto --prefix QUARTO_ESBUILD : ${nixpkgs.lib.makeBinPath [ pkgs.esbuild ]}/esbuild;
-            wrapProgram $out/bin/quarto --prefix QUARTO_DART_SASS : ${nixpkgs.lib.makeBinPath [ pkgs.nodePackages.sass ]}/sass;
+            wrapProgram $out/bin/quarto \
+              --prefix PATH : ${lib.makeBinPath [ deno ]} \
+              --prefix QUARTO_PANDOC : ${lib.makeBinPath [ pandoc ]}/pandoc \
+              --prefix QUARTO_ESBUILD : ${lib.makeBinPath [ esbuild ]}/esbuild \
+              --prefix QUARTO_DART_SASS : ${lib.makeBinPath [ nodePackages.sass ]}/sass \
+              --prefix QUARTO_R : ${lib.makeBinPath [ (rWrapper.override { packages = [ rPackages.rmarkdown ]; }) ]}/R
           '';
 
           installPhase = ''
@@ -1095,7 +1214,7 @@
             rm -r bin/tools
             mv bin/vendor/import_map.json bin
             rm -r bin/vendor
-            
+
             mv bin/* $out/bin
             mv share/* $out/share
 
@@ -1138,15 +1257,16 @@
             # https://discourse.nixos.org/t/nixos-with-poetry-installed-pandas-libstdc-so-6-cannot-open-shared-object-file/8442/3
             # https://nixos.wiki/wiki/Packaging/Quirks_and_Caveats#ImportError:_libstdc.2B.2B.so.6:_cannot_open_shared_object_file:_No_such_file
             #stdenv.cc.cc.lib
-            jupyterEnvironment
-            #python_custom
-            python_custom.pkgs.poetry
+            python_custom
+            #iPythonWithPackages.runtimePackages 
+            #jupyterEnvironment
+            #python_custom.pkgs.poetry
             python_custom.pkgs.nbdev
             #python_custom.pkgs.quarto
-            python_custom.pkgs.kaggle
+            #python_custom.pkgs.kaggle
             pkgs.graphviz
 
-            self.packages.${system}.quarto-cli
+            self.packages.${system}.quarto
 
             nixgl.defaultPackage.${system}
             pkgs.linuxPackages.nvidia_x11
@@ -1168,7 +1288,9 @@
 
           shellHook = ''export LD_LIBRARY_PATH='' + LD_LIBRARY_PATH + ''
             export TF_ENABLE_ONEDNN_OPTS=0 # when using GPU, oneDNN off is recommended 
+            export PYTHONPATH=~/Jupyter_Python/nbdev_cards:$PYTHONPATH
           '';
+          #trivial = nixpkgs.lib.concatStringsSep "/" [(builtins.getEnv "HOME") "Jupyter_Python" "src"];
         };
       }
     ));
@@ -1333,3 +1455,8 @@
 # Solution :
 # - Use `pyfinal.python_selected.pkgs.XXXX.override`
 # - Examples : setuptools, setuptools-scm, pip
+#
+# Error: No module named 'pkg_resources' when running nbdev inside devShell
+#
+# Solution :
+# - We need both `python_custom` and `python_custom.pkgs.nbdev` listed in devShell

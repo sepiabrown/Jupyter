@@ -1,8 +1,11 @@
 [tool.poetry]
-name = "my-python-package"
-version = "0.1.0"
+name = "my-python-poetry"
+version = "0.0.1"
 description = ""
 authors = ["Suwon Park <sepiabrown@naver.com>"]
+packages = [
+  { include = "trivial", from = "src" },
+]
 
 [tool.poetry.dependencies]
 # Must needed
@@ -42,9 +45,13 @@ nbconvert = "6.5.0"
 # (either directly or through other dependencies)
 # -> infinite recursion
 numpy = "1.22.4" # "1.21.5"
-matplotlib = "^3.5.1"
+# needed for numpy
+Cython = "^0.29.32"
+matplotlib = "3.5.2" # Fix due to nixos-22.05
 seaborn = "^0.11.2"
-tensorflow-gpu = "^2.9.1" ########## Caution! Very Tricky!
+tensorflow-gpu = "2.8.0" ########## Caution! Very Tricky! Fix due to nixos-22.05
+# needed by tensorflow-gpu
+tensorboard = "2.8.0"
 pymc = "^4.0.0" # pymc4
 # Needed for polynote
 ipython = "*"
@@ -57,10 +64,10 @@ ipython = "*"
 
 # Etc
 pyro-ppl = "^1.8.0" # error: Missing suitable source/wheel file entry for torch
-torch = {version = "1.11.0+cu115", source = "torchWithCuda"}
+torch = { path = "torch-1.11.0+cu115-cp39-cp39-linux_x86_64.whl" } # {version = "1.11.0+cu115", source = "torchWithCuda"}
 torchvision = { version = "^0.12.0", source = "pypi"} # needs explicit : scipy
 #dgl = "cu115-0.9.0"
-dgl-cu115 = { path = "dgl_cu115-0.9.0-cp39-cp39-manylinux1_x86_64.whl"}
+dgl-cu115 = { path = "dgl_cu115-0.9.0-cp39-cp39-manylinux1_x86_64.whl" }
 #dgl-cu115 = { url = "https://data.dgl.ai/wheels/dgl_cu115-0.9.0-cp39-cp39-manylinux1_x86_64.whl" }
 # Not using at the moment
 #pymc3 = "^3.11.4"
@@ -98,15 +105,26 @@ robobrowser = "^0.5.3"
 plotly = "5.6.0"
 rdkit = "^2022.3.5"
 PyTDC = "^0.3.6"
-nbdev = "^2.2.10"
-pip = "22.1.2"
-# pip needed by fastcore, ghapi which are needed by nbdev
-quarto = "^0.1.0"
 
-[[tool.poetry.source]]
-name = "torchWithCuda"
+
+#nbdev_cards = { path = "./nbdev_cards/", develop = true }
+#pyramid-mixpanel = { path = "./src/pyramid_mixpanel/", develop = true }
+#trivial = { path = "./src/trivial/", develop = true }
+
+#[[tool.poetry.source]]
+nbdev = "^2.3.0"
+# pip needed by ghapi,fastcore needed by nbdev
+pip = "^22.2.2"
+# wheel needed by astunparse needed by nbdev
+wheel = "^0.37.1"
+quarto = "^0.1.0"
+twine = "^4.0.1"
+# cryptography needed by SecretStorage needed by keyring needed by twine
+# version fixed due to sha256
+cryptography = "37.0.4"
+#name = "torchWithCuda"
 # ex) url = "https://download.pytorch.org/whl/cu115/torch-1.11.0%2Bcu115-cp39-cp39-linux_x86_64.whl"
-url = "https://download.pytorch.org/whl/cu115"
+#url = "https://download.pytorch.org/whl/cu115"
 # Solution: secondary = true, default with no option 
 #secondary = true
 
@@ -117,6 +135,7 @@ url = "https://download.pytorch.org/whl/cu115"
 # Solution: secondary = true, default with no option 
 
 #secondary = true
+
 [tool.poetry.dev-dependencies]
 
 [build-system]
