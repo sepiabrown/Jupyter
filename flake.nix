@@ -806,7 +806,12 @@
                 #    ;
                 #};
                 nbformat = pyprev.nbformat.overridePythonAttrs (old: {
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.flit-core ]);
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ 
+                    pyfinal.flit-core 
+                    pyfinal.hatchling 
+                    pyfinal.hatch-vcs
+                    pyfinal.importlib-metadata
+                  ]);
                 });
                 setuptools = (pyfinal.python_selected.pkgs.setuptools.overridePythonAttrs (old: {
                   catchConflicts = false;
@@ -839,16 +844,8 @@
                 };
 
                 nbdev = pyprev.nbdev.overridePythonAttrs (old: rec {
-                  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [
-                    pyfinal.twine
-                  ]);
-                  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [
-                    pyfinal.twine
-                  ]);
+                   # buildInputs, nativeBuildInputs, propagatedNativeBuildInputs doesn't work.
                   propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
-                    pyfinal.twine
-                  ]);
-                  propagatedNativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedNativeBuildInputs or [ ]) ++ [
                     pyfinal.twine
                   ]);
                 });
@@ -895,6 +892,10 @@
                 };
 
                 rdkit = pyprev.rdkit-pypi;
+
+                jeepney = pyprev.jeepney.overridePythonAttrs (old: rec {
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.outcome pyfinal.trio ]);
+                });
 
                 jupyter_core = pyfinal.python_selected.pkgs.jupyter_core.override {
                   inherit (pyfinal)
