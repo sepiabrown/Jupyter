@@ -844,7 +844,10 @@
                 };
 
                 nbdev = pyprev.nbdev.overridePythonAttrs (old: rec {
-                   # buildInputs, nativeBuildInputs, propagatedNativeBuildInputs doesn't work.
+                  # buildInputs, nativeBuildInputs, propagatedNativeBuildInputs doesn't work.
+                  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [
+                    self.packages.x86_64-linux.quarto
+                  ]);
                   propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
                     pyfinal.twine
                   ]);
@@ -1196,7 +1199,7 @@
           ];
 
           patches = [
-              ./fix-deno-path.patch
+            ./fix-deno-path.patch
           ];
 
           preFixup = ''
