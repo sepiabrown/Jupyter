@@ -551,16 +551,15 @@
                   doCheck = false;
                 });
 
-                tensorflow-gpu = pyprev.tensorflow.override {
+                tensorflow-gpu = (pyprev.tensorflow.overridePythonAttrs (old: { # tensorflow-gpu doesn't exist! Always search at hound!
+                #  #buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ pyfinal.tensorboard ]);
+                #  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ pyfinal.tensorboard ]);
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.pydot pyfinal.graphviz ]); # pyprev.gast pyfinal.gast_4 
+                })).override {
                   cudaSupport = true;
                   mklSupport = true;
                   mkl = final.mkl;
                 };
-                #= pyprev.tensorflow-gpu.overridePythonAttrs (old: { # tensorflow-gpu doesn't exist! Always search at hound!
-                #  #buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ pyfinal.tensorboard ]);
-                #  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ pyfinal.tensorboard ]);
-                #  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ pyprev.tensorboard ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.wheel ]); # pyprev.gast pyfinal.gast_4 
-                #});
 
                 tensorflow-io-gcs-filesystem = pyprev.tensorflow-io-gcs-filesystem.overridePythonAttrs (old: {
                   propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.numpy ]);
