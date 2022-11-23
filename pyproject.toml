@@ -3,128 +3,263 @@ name = "my-python-poetry"
 version = "0.0.1"
 description = ""
 authors = ["Suwon Park <sepiabrown@naver.com>"]
-packages = [
-  { include = "trivial", from = "src" },
-]
 
 [tool.poetry.dependencies]
-
-###################################################################################################
-# Must needed
 python = "~3.9"
-#hatchling = "0.25.1" # 1.0.0 not working
-#packaging = "^21.3" # statsmodels #"^20.0" # matplotlib
 
-## Safe from infinite recursion
-scikit-learn = "^1.1.1"
-keras = "^2.8.0"
-statsmodels = "^0.13.2"
-bokeh = "^2.4.3"
-numpyro = "^0.9.2" # needs jaxlib
-jaxlib = "^0.3.10"
+##################################################
+# GNN must-haves
+
+## Local files
+dgl-cu115 = { path = "localPackages/dgl_cu115-0.9.0-cp39-cp39-manylinux1_x86_64.whl" }
+# https://data.dgl.ai/wheels/repo.html
+#torch-cluster = { path = "localPackages/torch_cluster-1.6.0-cp39-cp39-manylinux1_x86_64.whl" }
+#torch-scatter = { path = "localPackages/torch_scatter-2.0.9-cp39-cp39-manylinux1_x86_64.whl" }
+#torch-sparse = { path = "localPackages/torch_sparse-0.6.15-cp39-cp39-manylinux1_x86_64.whl" }
+#torch-spline-conv = { path = "localPackages/torch_spline_conv-1.2.1-cp39-cp39-manylinux1_x86_64.whl" }
+#torch-cluster = { path = "localPackages/torch_cluster-1.6.0+pt112cu116-cp39-cp39-linux_x86_64.whl" }
+#torch-scatter = { path = "localPackages/torch_scatter-2.1.0+pt112cu116-cp39-cp39-linux_x86_64.whl" }
+#torch-sparse = { path = "localPackages/torch_sparse-0.6.15+pt112cu116-cp39-cp39-linux_x86_64.whl" }
+#torch-spline-conv = { path = "localPackages/torch_spline_conv-1.2.1+pt112cu116-cp39-cp39-linux_x86_64.whl" }
+
+torch-cluster = { path = "localPackages/torch_cluster-1.6.0+pt112cu116-cp39-cp39-manylinux1_x86_64.whl" }
+torch-scatter = { path = "localPackages/torch_scatter-2.1.0+pt112cu116-cp39-cp39-manylinux1_x86_64.whl" }
+torch-sparse = { path = "localPackages/torch_sparse-0.6.15+pt112cu116-cp39-cp39-manylinux1_x86_64.whl" }
+torch-spline-conv = { path = "localPackages/torch_spline_conv-1.2.1+pt112cu116-cp39-cp39-manylinux1_x86_64.whl" }
+
+
+
+# torch-* related
+# https://data.pyg.org/whl/torch-1.11.0%2Bcu115.html
+# https://pytorch-geometric.com/whl/torch-1.11.0%2Bcu115.html
+
+## Exactly 22.05
+
+## At least 22.05
+
+## Exactly 22.11
+
+## At least 22.11
+
+##
+### models
+graph-nets = "*" #"^1.1.0"
+jraph = "*" #"^0.0.6-alpha.0"
+torch-geometric = "*" #"^2.1.0"
+dglke = "*"
+
+### datasets
+ogb = "*"
+
+## Automatically derived packages
+#networks = "2.8.8"
+#dm-sonnet = "2.0.0"
+#dm-tree = "0.1.7"
+#colorama = "0.4.4"
+
+# GNN must-haves (end)
+##################################################
+
+##################################################
+# LAIDD
+
+## Local files
+
+## Exactly 22.05
+
+## At least 22.05
+
+## Exactly 22.11
+
+## At least 22.11
+
+##
+PyTDC = "*" #"^0.3.6"
+deepchem = "*" #"^2.6.1"
+
+## Automatically derived packages
+#rdkit = "*" #"^2022.3.5" == rdkit-pypi
+#seaborn = "^0.11.2" # needed by PyTDC
+
+# LAIDD (end)
+##################################################
+
+##################################################
+# nbdev
+
+## Local files
+
+## Exactly 22.05
+
+## At least 22.05
+
+## Exactly 22.11
+
+## At least 22.11
+
+##
+
+## Automatically derived packages
+
+# nbdev (end)
+##################################################
+
+##################################################
+# Conventional ML
+
+## Local files
+
+## Exactly 22.05
+
+## At least 22.05
+
+## Exactly 22.11
+
+## At least 22.11
+
+##
+pymc = "*" #"^4.4.0" # pymc4
+lightgbm = "*" #"3.3.1"
+xgboost = "*" #"1.5.2" # "^1.6.1" not working?
+missingno = "*" #"^0.5.1"
+imblearn = "*" #"^0.0"
+
+## Automatically derived packages
+#xarray-einstats = "0.3.0" # needed by arviz - pymc
+
+# Conventional ML (end)
+##################################################
+
+##################################################
+# Common must-haves
+
+## Local files
+
+## Exactly 22.05
+#apache-beam = "2.37.0" #">=2.37.0,<2.40.0" # needed by tensorflow-datasets
+#idna = "3.3"
+#numba = "0.55.2" 
+#tensorboard = "2.8.0"
+#typing-extensions = "4.1.1"
+#zipp = "3.7.0"
+#tensorflow-metadata = "1.8.0"
+#termcolor = "1.1.0"
+#h5py = "3.6.0"
+##pyarrow = "8.0.0" # apache-beam (2.40.0) depends on pyarrow (>=0.15.1,<8.0.0)
+#orjson = "3.6.7"
+#urllib3 = "1.26.9"
+
+## At least 22.05
+numpy = ">=1.21.5,<1.23.1"
+pythran = "0.9.11" #"<0.9.12" # VS tensorflow-gpu for gast # needed by scipy
+#orjson = ">=3.6.7,<3.8.0" # needed by apache-beam
+
+## Exactly 22.11
+
+## At least 22.11
+Cython = "^0.29.32" # needed by numpy needed by graph-nets
+
+##
+#statsmodels = "*" #"^0.13.2" # takes long time!
+pandas = "*" #"1.5.2"
+scikit-learn = "*" #"^1.1.1"
+matplotlib = "*" #"3.6.2" 
+plotly = "*" #"5.6.0"
+#chart_studio = "*" # plotly online tool
+bokeh = "*" #"^2.4.3"
+graphviz = "*" #"^0.20"
+wordcloud = "*" #"^1.8.2.2"
+
+## Automatically derived packages
+#typing-extensions = "4.1.1"
+#kiwisolver = "<=1.3.2" # needed by matplotlib
+#packaging = "^21.3" # needed by setuptools-scm
+#tomli = "2.0.1" # needed by setuptools-scm
+#setuptools-scm = "7.0.5"
+
+# Common must-haves (end)
+##################################################
+
+##################################################
+# Common optionals
+
+## Local files
+torch = { path = "localPackages/torch-1.12.1+cu116-cp39-cp39-manylinux1_x86_64.whl" }
+#https://download.pytorch.org/whl/cu116/torch-1.12.1%2Bcu116-cp39-cp39-linux_x86_64.whl
+
+## Exactly 22.05
+tensorflow-gpu = "2.8.1" # for tensorflow-* versions # 2.11.0 unpack error
+#scipy = "1.8.0"
+
+## At least 22.05
+#torch = "1.11.0" # not working
+scipy = "1.9.0"
+
+## Exactly 22.11
+#scipy = "1.9.1"
+#torch = "1.12.1" # not working
+#tensorflow-gpu = "2.10.0" # for tensorflow-* versions # 2.11.0 unpack error
+jax = "0.3.23" # needed by tensorflow-datasets
+jaxlib = "<0.3.22" # version lower than or equal to jax 
 #jaxlib = { path = "jaxlib-0.1.65+cuda112-cp39-none-manylinux2010_x86_64.whl" }
-jax = "^0.3.13"
-kaggle = "^1.5.12"
-graphviz = "^0.20"
-scipy = "<1.8.0" #"^1.8.0"
-kiwisolver = "<=1.3.2"
-cppy = "<=1.1.0"
-aesara = "^2.5.3"
+#https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 
-###################################################################################################
-## Needed for polynote
-##numpy
-##pandas==1.2.5
-jedi = ">=0.18.1"
-jep = "4.0.0"
-jsonschema = "4.6.0"
-virtualenv = "*"
-nbconvert = "6.5.0"
+## At least 22.11
+#meson-python = "0.9.0" # needed by scipy
+tensorflow-metadata = "^1.11.0"
 
-###################################################################################################
-# Packages that creates setuptools item in poetry.lock 
-# (either directly or through other dependencies)
-# -> infinite recursion
-numpy = "1.22.4" # "1.21.5"
-# needed for numpy
-Cython = "^0.29.32"
-seaborn = "^0.11.2"
-tensorflow-gpu = "2.8.0" ########## Caution! Very Tricky! Fix due to nixos-22.05
-# needed by tensorflow-gpu
-tensorboard = "2.8.0"
-pymc = "^4.0.0" # pymc4
-# Needed for polynote
-ipython = "*"
-
-###################################################################################################
-# Etc
-pyro-ppl = "^1.8.0" # error: Missing suitable source/wheel file entry for torch
-torch = { path = "torch-1.11.0+cu115-cp39-cp39-linux_x86_64.whl" } # {version = "1.11.0+cu115", source = "torchWithCuda"}
-torchvision = { version = "^0.12.0", source = "pypi"} # needs explicit : scipy
-#dgl = "cu115-0.9.0"
-dgl-cu115 = { path = "dgl_cu115-0.9.0-cp39-cp39-manylinux1_x86_64.whl" }
-#dgl-cu115 = { url = "https://data.dgl.ai/wheels/dgl_cu115-0.9.0-cp39-cp39-manylinux1_x86_64.whl" }
-# Not using at the moment
-#pymc3 = "^3.11.4"
-#Theano = "1.0.5"
-#pymc-nightly = "4.0.0-beta.2-dev.20220304"
-
-###################################################################################################
-# Not yet packaged! Using nixpkgs
-nbformat = "5.2.0" # "5.6.1" not working
-xgboost = "1.5.2" # "^1.6.1" not working
-pandas = "1.4.2"
-lightgbm = "3.3.1"
-matplotlib = "3.5.2" # Fix due to nixos-22.05
-# Doesn't exists in nixpkgs
-#bambi = "^0.9.0"
-
-# Failed to build
-#pycuda = "^2021.1"
-
-###################################################################################################
-# Test
-#deprecation = "2.1.0"
-#tomli = "2.0.1" # unknown package needs 2.0.1? flit?
-#flit = "3.7.1"
-#tqdm = "^4.64.0"
-#numba = "^0.56.0"
-py3nvml = "^0.2.7"
-multiprocess = "^0.70.13"
-ray = "^1.13.0"
-pydot = "^1.4.2"
-#opencv-python = "4.5.4" #"^4.5.4"
-#transformers = "4.16.2" # "4.16.2" 
-missingno = "^0.5.1"
-wordcloud = "^1.8.2.2"
-imblearn = "^0.0"
-robobrowser = "^0.5.3"
-plotly = "5.6.0"
-rdkit = "^2022.3.5"
-PyTDC = "^0.3.6"
-
-###################################################################################################
-# Local
-#nbdev_cards = { path = "./nbdev_cards/", develop = true }
-#pyramid-mixpanel = { path = "./src/pyramid_mixpanel/", develop = true }
-#trivial = { path = "./src/trivial/", develop = true }
-
-nbdev = "^2.3.0"
-# pip needed by ghapi,fastcore needed by nbdev
-pip = "^22.2.2"
-# wheel needed by astunparse needed by nbdev
-wheel = "^0.37.1"
-quarto = "^0.1.0"
-#twine = "^4.0.1"
+##
+### publishing system
+nbdev = "*" #"^2.3.0"
+quarto = "*" #"^0.1.0"
+twine = "*" #"^4.0.1"
 # cryptography needed by SecretStorage needed by keyring needed by twine
 # version fixed due to sha256
-cryptography = "37.0.4"
-deepchem = "^2.6.1"
-flatbuffers = "2.0.0" # "<3.0.0" for deepchem
+cryptography = "*" #"37.0.4"
 
+### numerical
+pyro-ppl = "*" #"^1.8.0" # error: Missing suitable source/wheel file entry for torch
+aesara = "*" #"^2.5.3"
+numpyro = "*" #"^0.9.2" # needs jaxlib
+#meson-python = "*" # needed by scipy
 
+kaggle = "*" #"^1.5.12"
 
+#tensorflow-datasets = "*" #"4.5.2"
+#torchvision = { version = "^0.12.0", source = "pypi"} # needs explicit : scipy
 
+### Etc
+#hatchling = "0.25.1" # 1.0.0 not working
+#cppy = "<=1.1.0"
+#numba = "0.55.2"
+#orjson = "3.6.7"
+#apache-beam = "2.40.0"
+#flit = "3.7.1"
+#py3nvml = "^0.2.7"
+#multiprocess = "^0.70.13"
+#pydot = "^1.4.2"
+#opencv-python = "4.5.4" #"^4.5.4"
+#transformers = "4.16.2" # "4.16.2" 
+#robobrowser = "^0.5.3"
+#ray = "^1.13.0" # ?? 2.1.0 doesn't work
+
+## Automatically derived packages
+#scipy = "1.9.3"
+#tensorboard = "2.10.0" # needed by tensorflow-gpu
+#tensorflow-estimator = "2.10.0" # needed by tensorflow-gpu
+#h5py = "^3.6.0" # needed by tensorflow-gpu
+#termcolor = "1.1.0" # needed by tensorflow-gpu
+#zipp = "3.7.0" # needed by markdown - tensorboard
+#tqdm = "^4.64.0" # needed by pyro-ppl,kaggle
+#protobuf = "3.19.5" # needed by tensorflow-gpu, grpcio-tools
+#flatbuffers = "2.0.0" # needed by tensorflow-gpu # "<3.0.0" for deepchem
+#keras = "^2.8.0" # needed by tensorflow-gpu
+#urllib3 = "1.26.9" # needed by requests - tensorboard
+#idna = "3.3" # needed by requests - tensorboard
+#nbformat = "5.7.0" #needed by nbformat
+
+# Common optionals (end)
+##################################################
 
 [tool.poetry.dev-dependencies]
 
@@ -132,28 +267,36 @@ flatbuffers = "2.0.0" # "<3.0.0" for deepchem
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
-#[[tool.poetry.source]]
-#name = "torchWithCuda"
-# ex) url = "https://download.pytorch.org/whl/cu115/torch-1.11.0%2Bcu115-cp39-cp39-linux_x86_64.whl"
-#url = "https://download.pytorch.org/whl/cu115"
-# Solution: secondary = true, default with no option 
-#secondary = true
+##################################################
+# Title
 
-#[[tool.poetry.source]]
-#name = "jaxlibWithCuda"
-##url = "https://storage.googleapis.com/jax-releases/cuda11/jaxlib-0.3.8+cuda11.cudnn82-cp39-none-manylinux2014_x86_64.whl"
-#url = "https://storage.googleapis.com/jax-releases/cuda11"
-#secondary = true
+## Local files
 
-#[[tool.poetry.dependencies.torch]]
-#python = "~3.9"
-#markers = "platform_system == 'Linux'"
-#url = "https://download.pytorch.org/whl/cu115/torch-1.11.0%2Bcu115-cp39-cp39-linux_x86_64.whl"
+## Exactly 22.05
 
-#[[tool.poetry.source]]
-#name = "dgl"
-# ex) url = "https://download.pytorch.org/whl/cu115/torch-1.11.0%2Bcu115-cp39-cp39-linux_x86_64.whl"
-#url = "https://data.dgl.ai/wheels"
-# Solution: secondary = true, default with no option 
+## At least 22.05
 
-#secondary = true
+## Exactly 22.11
+
+## At least 22.11
+
+##
+
+## Automatically derived packages
+
+# Title (end)
+##################################################
+
+##################################################
+## Packages that creates setuptools item in poetry.lock 
+## (either directly or through other dependencies) -> infinite recursion
+# numpy, Cython, seaborn, tensorflow-gpu, tensorflow-estimator, pymc, ipython
+##################################################
+## Needed for polynote
+# numpy, pandas, jedi, jep, jsonschema, virtualenv, nbconvert, ipython
+##################################################
+## Doesn't exists in nixpkgs
+#bambi = "^0.9.0"
+##################################################
+## Failed to build
+#pycuda = "^2021.1"

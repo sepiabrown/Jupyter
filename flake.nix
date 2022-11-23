@@ -1,39 +1,83 @@
 {
-  description = "MS thesis environment";
+  description = "fun with jupyterWith and poetry2nix";
   inputs = {
-    #nixpkgs_edge.url = "github:sepiabrown/nixpkgs/poetry_edge_test2";#test_mkl_on_server_echo1";#NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
-    #nixpkgs.url = "github:sepiabrown/nixpkgs/download_fix_220721"; #test_mkl_on_server_echo1";#NixOS/nixpkgs"; # poetry doesn't work at nixos-20.09
-    nixpkgs.url = "nixpkgs/nixos-22.05"; 
-    #nixpkgs_2111.url = "nixpkgs/nixos-21.11"; 
-    #nixpkgs_2009.url = "nixpkgs/nixos-20.09"; # poetry doesn't work at nixos-20.09
-    #nixpkgs_1703.url = "nixpkgs/1849e695b00a54cda86cb75202240d949c10c7ce"; # poetry doesn't work at nixos-20.09
-    jupyterWith = {
-      url = "github:sepiabrown/jupyterWith/python39_and_poetry2nix"; #/environment_variables_test"; 
-      #inputs.nixpkgs.follows = "nixpkgs";
-    };
-    flake-utils = {
-      url = "github:numtide/flake-utils";
-      #inputs.nixpkgs.follows = "nixpkgs";
-    };
-    poetry2nix_nix_community = {
+    nixpkgs.url = "github:sepiabrown/nixpkgs/pythonRelaxDepsHook"; 
+    nixpkgs_2211.url = "github:sepiabrown/nixpkgs/nixos-unstable_pythonRelaxDepsHook"; 
+    #nixpkgs.url = "nixpkgs/nixos-22.05"; 
+    #nixpkgs_2211.url = "nixpkgs/nixos-unstable"; 
+    poetry2nix = {
+      #url = "github:sepiabrown/poetry2nix/python_overlay_fix";
       url = "github:nix-community/poetry2nix";
+      #url = "github:nix-community/poetry2nix?ref=refs/pull/787/merge";
+      # https://github.com/nix-community/poetry2nix/issues/810#issuecomment-1312531883
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    dpaetzel.url = "github:dpaetzel/overlays/master";
-    nixgl = {
-      url = "github:sepiabrown/nixGL";
+    flake-utils.url = "github:numtide/flake-utils";
+    jupyterWith = {
+      url = "github:tweag/jupyterWith/deaa6c66165fd1ebe8617a8f133ad45110ac659c"; 
+      inputs.nixpkgs.follows = "nixpkgs";
     };
   };
 
-  outputs = inputs: with inputs; # inputs@{ self, nixpkgs, jupyterWith, flake-utils, dpaetzel, ... }:
+  outputs = inputs: with inputs; 
     let
       LD_LIBRARY_PATH = ''
-        ${nixpkgs.lib.makeLibraryPath [ self.pkgs.x86_64-linux.cudaPackages_11_6.cudatoolkit "${self.pkgs.x86_64-linux.cudaPackages_11_6.cudatoolkit}" self.pkgs.x86_64-linux.cudaPackages_11_6.cudnn self.pkgs.x86_64-linux.nvidia_custom ]}:$LD_LIBRARY_PATH
+        ${nixpkgs.lib.makeLibraryPath [ self.pkgs.x86_64-linux.cudaPackages.cudatoolkit "${self.pkgs.x86_64-linux.cudaPackages.cudatoolkit}" self.pkgs.x86_64-linux.cudaPackages.cudnn self.pkgs.x86_64-linux.nvidia_custom ]}:$LD_LIBRARY_PATH
       '';
+
+      pkgs_2211 = import nixpkgs_2211 {
+        system = "x86_64-linux";
+        config.allowUnfree = true;
+        config.cudaSupport = true;
+        config.mklSupport = true;
+        #overlays = [ self.overlay ];
+        #overlays = (builtins.attrValues jupyterWith.overlays) ++ [ self.overlay ]; # [ (import ./haskell-overlay.nix) ];
+      };
     in
     {
-      overlay = nixpkgs.lib.composeManyExtensions ([
-        #poetry2nix_nix_community.overlay
+      # Order of overlays matter! Earlier ones get overriden before later ones.
+      overlay = nixpkgs.lib.composeManyExtensions (
+        #(builtins.attrValues jupyterWith.overlays) ++ 
+        [
+        #(final: prev: {
+        #  poetry2nix = (poetry2nix.overlay final prev).poetry2nix.overrideScope' (p2nixfinal: p2nixprev: {
+        #    # pyfinal & pyprev refers to python packages
+        #    defaultPoetryOverrides = (p2nixprev.defaultPoetryOverrides.overrideOverlay (pyfinal: pyprev: {
+        #      tensorflow = null;
+        #      tensorflow-gpu = null;
+        #    }));
+        #  });
+        #})
+        (final: prev: {
+          poetry2nix = prev.poetry2nix.overrideScope' (p2nixfinal: p2nixprev: {
+            # pyfinal & pyprev refers to python packages
+            defaultPoetryOverrides = (p2nixprev.defaultPoetryOverrides.overrideOverlay (pyfinal: pyprev: {
+              babel = null;
+              Babel = null;
+              babel_ = pyprev.babel;
+
+              keras = null;
+              Keras = null;
+              keras_ = pyprev.keras;
+              tensorflow = null;
+              tensorflow-gpu = null;
+            })).extend (pyfinal: pyprev: {
+              babel = pyprev.babel_;
+              keras = pyprev.keras_;
+            });
+          });
+        })
+
+        #(final: prev: {
+        #  poetry2nix = prev.poetry2nix.overrideScope' (p2nixfinal: p2nixprev: {
+        #    # pyfinal & pyprev refers to python packages
+        #    defaultPoetryOverrides = (p2nixprev.defaultPoetryOverrides.extend (pyfinal: pyprev: {
+        #      babel = pyprev.babel_;
+        #      keras = pyprev.keras_;
+        #    }));
+        #  });
+        #})
+
         (final: prev: {
           blas_custom = (prev.blas.override {
             blasProvider = final.mkl;
@@ -41,18 +85,16 @@
             buildInputs = (oldAttrs.buildInputs or [ ])
             ++ final.lib.optional final.stdenv.hostPlatform.isDarwin final.fixDarwinDylibNames;
           });
+
+          cudaPackages = prev.cudaPackages_11_6;
+          #cudaPackages = prev.cudaPackages_11_3;
+
           lapack_custom = (prev.lapack.override {
             lapackProvider = final.mkl;
           }).overrideAttrs (oldAttrs: {
             buildInputs = (oldAttrs.buildInputs or [ ])
             ++ final.lib.optional final.stdenv.hostPlatform.isDarwin final.fixDarwinDylibNames;
           });
-          # For jep - openjdk8 - liberation_ttf - ... - numpy -> mkl error
-          liberation_ttf = prev.liberation_ttf.override {
-            #python3 = self.python_custom.x86_64-linux;
-            python3 = final.python39;
-          };
-          libtensorflow = self.python_custom.x86_64-linux.pkgs.tensorflow.passthru.libtensorflow;
           nvidia_custom = prev.linuxPackages.nvidia_x11.overrideAttrs (oldAttrs: rec {
             version = "495.29.05";
             src = builtins.fetchurl {
@@ -63,174 +105,332 @@
           poetry2nix = prev.poetry2nix.overrideScope' (p2nixfinal: p2nixprev: {
             # pyfinal & pyprev refers to python packages
             defaultPoetryOverrides = (p2nixprev.defaultPoetryOverrides.extend (pyfinal: pyprev:
-              #let
-              #  torch_custom = nixpkgs.lib.makeOverridable
-              #    (
-              #      { enableCuda ? true
-              #      , cudaPackages ? final.cudaPackages #, cudatoolkit ? pkgs.cudatoolkit_10_1
-              #      , cudaArchList ? null
-              #      , pkg ? pyprev.torch
-              #      }:
-              #      let
-              #        inherit (cudaPackages) cudatoolkit cudnn nccl cuda_nvcc;
+                  let
+                    inherit (final.cudaPackages) cudatoolkit cudnn nccl;
+  cudatoolkit_joined = final.symlinkJoin {
+    name = "${cudatoolkit.name}-unsplit";
+    # nccl is here purely for semantic grouping it could be moved to nativeBuildInputs
+    paths = [ cudatoolkit.out cudatoolkit.lib nccl.dev nccl.out ];
+  };
 
-              #        cudatoolkit_joined = final.symlinkJoin {
-              #          name = "${cudatoolkit.name}-unsplit";
-              #          # nccl is here purely for semantic grouping it could be moved to nativeBuildInputs
-              #          paths = [ cudatoolkit.out cudatoolkit.lib nccl.dev nccl.out ];
-              #        };
+  brokenArchs = [ "3.0" ]; # this variable is only used as documentation.
 
-              #        cudaCapabilities = rec {
-              #          cuda9 = [
-              #            "3.5"
-              #            "5.0"
-              #            "5.2"
-              #            "6.0"
-              #            "6.1"
-              #            "7.0"
-              #            "7.0+PTX" # I am getting a "undefined architecture compute_75" on cuda 9
-              #            # which leads me to believe this is the final cuda-9-compatible architecture.
-              #          ];
+  cudaCapabilities = rec {
+    cuda9 = [
+      "3.5"
+      "5.0"
+      "5.2"
+      "6.0"
+      "6.1"
+      "7.0"
+      "7.0+PTX"  # I am getting a "undefined architecture compute_75" on cuda 9
+                 # which leads me to believe this is the final cuda-9-compatible architecture.
+    ];
 
-              #          cuda10 = cuda9 ++ [
-              #            "7.5"
-              #            "7.5+PTX" # < most recent architecture as of cudatoolkit_10_0 and pytorch-1.2.0
-              #          ];
+    cuda10 = cuda9 ++ [
+      "7.5"
+      "7.5+PTX"  # < most recent architecture as of cudatoolkit_10_0 and pytorch-1.2.0
+    ];
 
-              #          cuda11 = cuda10 ++ [
-              #            "8.0"
-              #            "8.0+PTX" # < CUDA toolkit 11.0
-              #            "8.6"
-              #            "8.6+PTX" # < CUDA toolkit 11.1
-              #          ];
-              #        };
-              #        final_cudaArchList =
-              #          if !enableCuda || cudaArchList != null
-              #          then cudaArchList
-              #          else cudaCapabilities."cuda${nixpkgs.lib.versions.major cudatoolkit.version}";
-              #      in
-              #      pkg.overrideAttrs (old: {
-              #        src_test = old.src;
-              #        preferWheels = true;
-              #        dontStrip = false;
-              #        format = "wheels";
+    cuda11 = cuda10 ++ [
+      "8.0"
+      "8.0+PTX"  # < CUDA toolkit 11.0
+      "8.6"
+      "8.6+PTX"  # < CUDA toolkit 11.1
+    ];
+  };
+  final_cudaArchList =
+    if !final.cudaSupport || final.cudaArchList != null
+    then final.cudaArchList
+    else cudaCapabilities."cuda${nixpkgs.lib.versions.major cudatoolkit.version}";
 
-              #        preConfigure = nixpkgs.lib.optionalString (!enableCuda) ''
-              #          export USE_CUDA=0
-              #        '' + nixpkgs.lib.optionalString enableCuda ''
-              #          export TORCH_CUDA_ARCH_LIST="${nixpkgs.lib.strings.concatStringsSep ";" final_cudaArchList}"
-              #          export CC=${cudatoolkit.cc}/bin/gcc CXX=${cudatoolkit.cc}/bin/g++
-              #        '' + ''export LD_LIBRARY_PATH='' + LD_LIBRARY_PATH +
-              #        nixpkgs.lib.optionalString (enableCuda && cudnn != null) ''
-              #          export CUDNN_INCLUDE_DIR=${cudnn}/include
-              #        ''; # enableCuda ${cudatoolkit}/targets/x86_64-linux/lib
-
-              #        # patchelf --set-rpath "${lib.makeLibraryPath [ stdenv.cc.cc.lib ]}"
-              #        preFixup = nixpkgs.lib.optionalString (!enableCuda) ''
-              #          # For some reason pytorch retains a reference to libcuda even if it
-              #          # is explicitly disabled with USE_CUDA=0.
-              #          find $out -name "*.so" -exec ${nixpkgs.patchelf}/bin/patchelf --remove-needed libcuda.so.1 {} \;
-              #        '';
-              #        nativeBuildInputs =
-              #          (old.nativeBuildInputs or [ ])
-              #          ++ [ final.autoPatchelfHook ]
-              #          ++ nixpkgs.lib.optionals enableCuda [ cudatoolkit_joined final.addOpenGLRunpath ];
-              #        buildInputs =
-              #          (old.buildInputs or [ ])
-              #          ++ [ pyfinal.typing-extensions pyfinal.pyyaml ]
-              #          ++ nixpkgs.lib.optionals enableCuda [
-              #            final.nvidia_custom
-              #            nccl.dev
-              #            nccl.out
-              #            cudatoolkit
-              #            cudnn
-              #            cuda_nvcc
-              #            final.magma
-              #            nccl
-              #          ];
-              #        propagatedBuildInputs = [
-              #          pyfinal.numpy
-              #          pyfinal.future
-              #          pyfinal.typing-extensions
-              #        ];
-              #      })
-              #    )
-              #    { };
-              #in
+  # Normally libcuda.so.1 is provided at runtime by nvidia-x11 via
+  # LD_LIBRARY_PATH=/run/opengl-driver/lib.  We only use the stub
+  # libcuda.so from cudatoolkit for running tests, so that we don’t have
+  # to recompile pytorch on every update to nvidia-x11 or the kernel.
+  cudaStub = final.linkFarm "cuda-stub" [{
+    name = "libcuda.so.1";
+    path = "${cudatoolkit}/lib/stubs/libcuda.so";
+  }];
+  cudaStubEnv = nixpkgs.lib.optionalString cudaSupport
+    "LD_LIBRARY_PATH=${cudaStub}\${LD_LIBRARY_PATH:+:}$LD_LIBRARY_PATH ";
+              in
               {
-                #importlib-metadata = pyprev.importlib-metadata.overridePythonAttrs ( old: {
-                #  format = "pyproject";
-                #});
-                astroid = pyprev.astroid.overridePythonAttrs (old: rec {
-                  version = "2.11.2";
-                  src = final.fetchFromGitHub {
-                    owner = "PyCQA";
-                    repo = "astroid";
-                    rev = "v${version}";
-                    sha256 = "sha256-adnvJCchsMWQxsIlenndUb6Mw1MgCNAanZcTmssmsEc=";
-                  };
-                  #buildInputs = (old.buildInputs or [ ]) ++ [ pyfinal.wrapt ];
-                  #propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ [ pyfinal.wrapt ];
-                  #nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ pyfinal.wrapt ];
-                  #propagatedNativeBuildInputs = (old.propagatedNativeBuildInputs or [ ]) ++ [ pyfinal.wrapt ];
-                });
-                # gast 0.5.0 needed by beniget needed by pythran needed by scipy
-                # but tensorflow needs gast <= 0.4.0
-                beniget = pyprev.beniget.overridePythonAttrs (old: rec {
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ pyprev.gast ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.gast_5 ]);
+                ############################################################
+                ### Necessities for solving infinite recursion ###
+                python_selected = prev.python39Packages;
+
+                #setuptools = (pyfinal.python_selected.setuptools.overridePythonAttrs (old: {
+                setuptools = (pkgs_2211.python39Packages.setuptools.override {
+                # 65.3.0 : nixos-22.11
+                  inherit (pyfinal)
+                    python
+                    bootstrapped-pip
+                    pipInstallHook
+                    setuptoolsBuildHook
+                  ;
+                }).overridePythonAttrs (old: rec {
+                  #catchConflicts = false;
+                  #format = "other";
                 });
 
-                cython = pyprev.cython.overridePythonAttrs (old: rec {
-                  propagatedBuildInputs = [ pyfinal.setuptools ];
+                # With this, skipSetupToolsSCM in mk-poetry-dep.nix is not needed
+                #setuptools-scm = pyfinal.python_selected.setuptools-scm.override {
+                setuptools-scm = pkgs_2211.python39Packages.setuptools-scm.override {
+                # 7.0.5 : nixos-22.11
+                  inherit (pyfinal)
+                    packaging
+                    typing-extensions
+                    tomli
+                    setuptools;
+                };
+
+                #pip = pyfinal.python_selected.pip.override {
+                pip = pkgs_2211.python39Packages.pip.override {
+                # 22.2.2 : nixos-22.11
+                  inherit (pyfinal)
+                    bootstrapped-pip
+                    mock
+                    scripttest
+                    virtualenv
+                    pretend
+                    pytest
+                    pip-tools
+                  ;
+                };
+                ### Necessities for solving infinite recursion (end) ###
+                ############################################################
+
+                ############################################################
+                ### Override python packages if they lack dependencies
+
+                #apache-beam = pyprev.apache-beam.overridePythonAttrs (old: rec {
+                #apache-beam = pyfinal.python_selected.apache-beam.overridePythonAttrs (old: {
+                #apache-beam = (pkgs_2211.python39Packages.apache-beam.override {
+                #  inherit (pyfinal)
+                #    cloudpickle
+                #    crcmod
+                #    cython
+                #    dill
+                #    fastavro
+                #    freezegun
+                #    grpcio
+                #    grpcio-tools
+                #    hdfs
+                #    httplib2
+                #    mock
+                #    mypy-protobuf
+                #    numpy
+                #    oauth2client
+                #    orjson
+                #    pandas
+                #    parameterized
+                #    proto-plus
+                #    protobuf
+                #    psycopg2
+                #    pyarrow
+                #    pydot
+                #    pyhamcrest
+                #    pymongo
+                #    pytestCheckHook
+                #    python-dateutil
+                #    pythonRelaxDepsHook
+                #    pytz
+                #    pyyaml
+                #    requests
+                #    requests-mock
+                #    scikit-learn
+                #    sqlalchemy
+                #    tenacity
+                #    #testcontainers # doesn't exist in 22.05
+                #    typing-extensions;
+                #}).overridePythonAttrs (old: {
+                #  version = pyprev.apache-beam.version;
+                #  src = pyprev.apache-beam.src;
+                #});
+
+                cryptography = pyprev.cryptography.overridePythonAttrs (old: rec {
+                  #buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ final. ]);
+                  #nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ final. ]);
+                  #propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal. ]);
+                  cargoDeps =
+                    prev.rustPlatform.fetchCargoTarball {
+                      src = old.src;
+                      sourceRoot = "${old.pname}-${old.version}/${cargoRoot}";
+                      name = "${old.pname}-${old.version}";
+                      #inherit sha256;
+                      #sha256 = "sha256-lzHLW1N4hZj+nn08NZiPVM/X+SEcIsuZDjEOy0OOkSc=";
+                      sha256 = "sha256-BN0kOblUwgHj5QBf52RY2Jx0nBn03lwoN1O5PEohbwY=";
+                    };
+                  cargoRoot = "src/rust";
                 });
+                # = (pyfinal.python_selected..override {
+                # = (pkgs_2211.python39Packages..override {
+                ## 1.23.0 : nixos-22.05< <22.11
+                #  inherit (pyfinal)
+                #  ;
+                #}).overridePythonAttrs (old: rec {
+                #  version = pyprev..version;
+                #  src = pyprev..src;
+                #});
+
+                comm = pyprev.comm.overridePythonAttrs (old: rec {
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.hatchling ]);
+                });
+
+                contourpy = pyprev.contourpy.overridePythonAttrs (old: rec {
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.pybind11 ]);
+                });
+
+                #cython = pyprev.cython.overridePythonAttrs (old: rec {
+                #  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [  ]) ++ [ pyfinal.setuptools ]);
+                #});
+                # = (pyfinal.python_selected..override {
+                cython = (pkgs_2211.python39Packages.cython.override {
+                # 0.29.32 : nixos-22.11
+                  inherit (pyfinal)
+                    python
+                    numpy
+                  ;
+                }).overridePythonAttrs (old: rec {
+                  #version = pyprev.cython.version; # this overrides with poetry2nix version, reverting our override
+                  #src = pyprev.cython.src;
+                });
+
                 Cython = pyfinal.cython;
 
-                gast_5 = pyprev.gast.overridePythonAttrs (old: rec {
-                  pname = "gast";
-                  version = "0.5.0";
-
-                  src = final.fetchFromGitHub {
-                    owner = "serge-sans-paille";
-                    repo = pname;
-                    rev = version;
-                    sha256 = "sha256-fGkr1TIn1NPlRh4hTs9Rh/d+teGklrz+vWKCbacZT2M=";
-                  };
-                });
-                httpx = pyprev.httpx.overridePythonAttrs (old: {
-                  # for jupyterlab -> .. -> falcon
-                  doCheck = false;
-                });
-                jax = (pyfinal.python_selected.pkgs.jax.override {
+                #dm-sonnet = (pyprev.dm-sonnet.override {
+                dm-sonnet = (pkgs_2211.python39Packages.dm-sonnet.override {
+                # 2.0.0 : nixos-22.11
                   inherit (pyfinal)
                     absl-py
+                    dm-tree
+                    docutils
+                    numpy
+                    tabulate
+                    tensorflow-datasets
+                    wrapt;
+                  tensorflow = pyfinal.tensorflow-gpu;
+                }).overridePythonAttrs (old: {
+                  propagatedBuildInputs = [
+                    pyfinal.dm-tree
+                    pkgs_2211.python39Packages.etils
+                    pyfinal.numpy
+                    pyfinal.tabulate
+                    pyfinal.wrapt
+
+                    pyfinal.absl-py
+                    pyfinal.six
+
+                    pyfinal.importlib-resources
+                    pyfinal.typing-extensions
+                    pyfinal.zipp
+                  ];
+                  #version = pyprev.dm-sonnet.version;
+                  #src = pyprev.dm-sonnet.src;
+                });
+
+                #dm-tree = pyfinal.python_selected.dm-tree.override {
+                #dm-tree = pyprev.dm-tree.override {
+                dm-tree = (pkgs_2211.python39Packages.dm-tree.override {
+                # 0.1.7 : nixos-22.11
+                  inherit (pyfinal)
+                    absl-py
+                    attrs
+                    numpy
+                    pybind11
+                    wrapt;
+                }).overridePythonAttrs (old: {
+                  version = pyprev.dm-tree.version;
+                  src = pyprev.dm-tree.src;
+                });
+
+                #grpcio-tools = pkgs_2211.python39Packages.grpcio-tools.override {
+                #  inherit (pyfinal)
+                #    protobuf
+                #    grpcio;
+                #};
+
+                # = (pyfinal.python_selected..override {
+                hatch-nodejs-version = (pkgs_2211.python39Packages.hatch-nodejs-version.override {
+                # 0.3.0 : nixos-22.11<
+                  inherit (pyfinal)
+                    pytestCheckHook
+                    hatchling
+                  ;
+                }).overridePythonAttrs (old: rec {
+                  #version = pyprev.hatch-nodejs-version.version; # doesn't exist in 22.05
+                  #src = pyprev.hatch-nodejs-version.src;
+                });
+
+                h5py = (pyfinal.python_selected.h5py.override {
+                # 3.6.0 : nixos-22.05
+                  inherit (pyfinal)
+                    numpy
+                    cython
+                    six
+                    pkgconfig
+                    unittest2
+                    mpi4py
+                    openssh
+                    pytestCheckHook
+                    cached-property
+                  ;
+                }).overridePythonAttrs (old: rec {
+                  #version = pyprev.h5py.version; # format issue
+                  #src = pyprev.h5py.src;
+                });
+
+                idna = pyprev.idna.overridePythonAttrs (old: rec {
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.flit-core ]);
+                });
+
+                ####
+                #jax = (pyprev.jax.overridePythonAttrs (old: rec {
+                #jax = (pyfinal.python_selected.jax.override {
+                jax = (pkgs_2211.python39Packages.jax.override {
+                # 0.3.23 : nixos-22.11
+                  inherit (pyfinal)
+                    absl-py
+                    jaxlib
+                    matplotlib
                     numpy
                     opt-einsum
+                    pytestCheckHook
+                    pytest-xdist # duplicated packages error
                     scipy
                     typing-extensions
-                    jaxlib
-                    #pytest-xdist # duplicated packages error
                     ;
+                  etils = pkgs_2211.python39Packages.etils;
                   blas = final.blas_custom;
                   lapack = final.lapack_custom;
                 }).overridePythonAttrs (old: rec {
-                  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ pyfinal.jaxlib ]);
-                  doCheck = false;
+                  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [
+                    #pyfinal.jaxlib
+                  ]);
+                  propagatedBuildInputs = [
+                    pyfinal.absl-py
+                    pkgs_2211.python39Packages.etils
+                    pyfinal.numpy
+                    pyfinal.opt-einsum
+                    pyfinal.scipy
+                    pyfinal.typing-extensions
+
+                    pyfinal.importlib-resources
+                    pyfinal.zipp
+                  ];
+                  #version = pyprev.jax.version; # format issue
+                  #src = pyprev.jax.src;
                 });
-                jaxlib = pyfinal.python_selected.pkgs.jaxlib.override {
-                  #inherit (final)
-                  #  # Build-time dependencies:
-                  #  addOpenGLRunpath
-                  #  bazel_5
-                  #  binutils
-                  #  buildBazelPackage
-                  #  fetchFromGitHub
-                  #  git
-                  #  jsoncpp
-                  #  symlinkJoin
-                  #  which
-                  #  ;
+
+                ####
+                #jaxlib = (pkgs_2211.python39Packages.jaxlib.override {
+                ##jaxlib = pyprev.jaxlib.override {
+                jaxlib = (pyfinal.python_selected.jaxlib.override {
+                # 0.3.20 : nixos-22.05< <nixos-22.11
                   inherit (pyfinal)
                     # Build-time dependencies:
+                    python
                     cython
                     pybind11
                     setuptools
@@ -242,673 +442,341 @@
                     numpy
                     scipy
                     six
-
-                    # Runtime dependencies:
-                    #double-conversion
-                    #giflib
-                    #grpc
-                    #libjpeg_turbo
-                    python
-                    #snappy
-                    #zlib
                     ;
                   cudaSupport = true;
-                  cudaPackages = final.cudaPackages_11_6;
+                  cudaPackages = final.cudaPackages;
                   mklSupport = true;
-                };
-                #.overridePythonAttrs ( old: {
-                #  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x (with final.python3.pkgs; [ scipy numpy six ])) ((old.propagatedBuildInputs or [ ]) ++ [ ]);
-                #});
-                jep = pyprev.jep.overridePythonAttrs (old: {
-                  propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ [
-                    pyfinal.setuptools
-                    pyfinal.numpy
-                  ];
-                  buildInputs = (old.buildInputs or [ ]) ++ [
-                    final.glibc
-                    final.openjdk8
-                  ];
+                }).overridePythonAttrs (old: rec {
+                  version = pyprev.jaxlib.version;
+                  src = pyprev.jaxlib.src;
                 });
+
+                # = (pyfinal.python_selected..override {
+                jsonschema = (pkgs_2211.python39Packages.jsonschema.override {
+                # 4.17.1 : nixos-22.11<
+                  inherit (pyfinal)
+                    attrs
+                    hatch-fancy-pypi-readme
+                    hatch-vcs
+                    hatchling
+                    importlib-metadata
+                    importlib-resources
+                    pyrsistent
+                    twisted
+                    typing-extensions
+                  ;
+                }).overridePythonAttrs (old: rec {
+                  version = pyprev.jsonschema.version;
+                  src = pyprev.jsonschema.src;
+                });
+
+                # = (pyfinal.python_selected..override {
+                jupyter = (pkgs_2211.python39Packages.jupyter.override {
+                # 1.0.0 : nixos-22.11<
+                  inherit (pyfinal)
+                    notebook
+                    qtconsole
+                    jupyter_console
+                    nbconvert
+                    ipykernel
+                    ipywidgets
+                  ;
+                }).overridePythonAttrs (old: rec {
+                  #version = pyprev.jupyter.version;
+                  #src = pyprev.jupyter.src;
+                });
+
                 jupyterlab = pyprev.jupyterlab.overridePythonAttrs (oldAttrs: {
                   makeWrapperArgs = (oldAttrs.makeWrapperArgs or [ ]) ++ [
                     "--set LD_LIBRARY_PATH"
                     LD_LIBRARY_PATH
                     "--set TF_ENABLE_ONEDNN_OPTS 0" # when using GPU, oneDNN off is recommended 
-                    "--set XLA_FLAGS --xla_gpu_cuda_data_dir=${final.cudaPackages_11_6.cudatoolkit}"
-                    #"--set AESARA_FLAGS device=cuda0,dnn__base_path=${final.cudaPackages_11_6.cudnn},blas__ldflags=-lblas,dnn__library_path=${final.cudaPackages_11_6.cudnn}/lib,dnn__include_path=${final.cudaPackages_11_6.cudnn}/include"#${nixpkgs.lib.makeLibraryPath [ final.cudaPackages.cudnn ]}" #,cuda__root=${final.cudaPackages_11_6.cudatoolkit}
-                    #"--set CUDA_HOME ${final.cudaPackages_11_6.cudatoolkit}"
-                    #"--set CUDA_INC_DIR ${final.cudaPackages_11_6.cudatoolkit}/include"
-          #export CUDA_PATH=${pkgs.cudatoolkit}
-          #export LD_LIBRARY_PATH=${pkgs.linuxPackages.nvidia_x11}/lib:${pkgs.ncurses5}/lib
+                    "--set XLA_FLAGS --xla_gpu_cuda_data_dir=${cudatoolkit}"
+                    #"--set AESARA_FLAGS device=cuda0,dnn__base_path=${cudnn},blas__ldflags=-lblas,dnn__library_path=${cudnn}/lib,dnn__include_path=${cudnn}/include"#${nixpkgs.lib.makeLibraryPath [ cudnn ]}" #,cuda__root=${cudatoolkit}
+                    #"--set CUDA_HOME ${cudatoolkit}"
+                    #"--set CUDA_INC_DIR ${cudatoolkit}/include"
                   ];
                 });
-                jsonschema = pyprev.jsonschema.overridePythonAttrs (old: rec {
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
-                    pyfinal.hatchling
-                    # 'hatchling.build' has no attribute 'prepare_metadata_for_build_wheel': needs hatch-vcs not importlib-metadata
-                    pyfinal.hatch-vcs
-                    pyfinal.attrs
-                    pyfinal.pyrsistent
-                  ]);
-                });
-                #kaggle = pyprev.kaggle.overridePythonAttrs (old: {
-                #  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ pyprev.tqdm ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.tqdm pyfinal.tqdm_custom ]);
-                ###  #propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ [ pyfinal.t];
-                #});
-                #kaggle = (final.python3.pkgs.kaggle.override {
-                #  inherit (pyfinal) 
-                #    python-dateutil
-                #    python-slugify
-                #    six
-                #    requests
-                #    #tqdm_custom 
-                #    urllib3;
-                #  tqdm = pyfinal.tqdm_custom; # tqdm needs overriden numpy
-                #});
-                #libgpuarray = pyprev.libgpuarray.overridePythonAttrs ( old: {
-                #  libraryPath = nixpkgs.lib.makeLibraryPath (with final.cudaPackages_11_6; [ cudnn cudatoolkit.lib cudatoolkit.out final.clblas final.ocl-icd ]);
-                #  buildInputs = (old.buildInputs or [ ]) ++ [ final.cudaPackages_11_6.cudatoolkit final.cudaPackages_11_6.cudnn pyfinal.nose];
-                #  nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
-                #    final.cudaPackages_11_6.cudatoolkit final.cudaPackages_11_6.cudnn pyfinal.nose
-                #  ];
-                #});
-                mkl-service = pyprev.mkl-service.overridePythonAttrs (old: {
-                  patchPhase = ''
-                    substituteInPlace mkl/_mkl_service.pyx \
-                      --replace "'avx512_e4': mkl.MKL_ENABLE_AVX512_E4," " " \
-                      --replace "'avx2_e1': mkl.MKL_ENABLE_AVX2_E1," " "
 
-                    substituteInPlace mkl/_mkl_service.pxd \
-                      --replace "int MKL_ENABLE_AVX512_E4" " " \
-                      --replace "int MKL_ENABLE_AVX2_E1" " "
-                  '';
-                });
-                # numba needs setuptools<60 but jupyter-packaging needs setuptools>=60
-                #numba = pyprev.numba.override {
-                #  setuptools = nixpkgs_2111.legacyPackages.x86_64-linux.python39.pkgs.setuptools;
-                #};
-
-
-                numpy = pyprev.numpy.overridePythonAttrs (old:
-                  let
-                    blas = final.mkl; # not prev.blas
-                    blasImplementation = nixpkgs.lib.nameFromURL blas.name "-";
-                    cfg = prev.writeTextFile {
-                      name = "site.cfg";
-                      text = (
-                        nixpkgs.lib.generators.toINI
-                          { }
-                          {
-                            ${blasImplementation} = {
-                              include_dirs = "${blas}/include";
-                              library_dirs = "${blas}/lib";
-                            } // nixpkgs.lib.optionalAttrs (blasImplementation == "mkl") {
-                              mkl_libs = "mkl_rt";
-                              lapack_libs = "";
-                            };
-                          }
-                      );
-                    };
-                  in
-                  {
-                    nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ final.gfortran ];
-                    buildInputs = (old.buildInputs or [ ]) ++ [ blas ];
-                    enableParallelBuilding = true;
-                    preBuild = ''
-                      ln -s ${cfg} site.cfg
-                    '';
-                    passthru = old.passthru // {
-                      blas = blas;
-                      inherit blasImplementation cfg;
-                    };
-                  }
-                );
-                pillow = pyprev.pillow.overridePythonAttrs (old: {
-                  buildInputs = (old.buildInputs or [ ]) ++ [ final.xorg.libxcb ];
-                });
-                #poetry = pyprev.poetry.overridePythonAttrs (old: rec {
-                #  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ pyfinal.setuptools ]) ((old.nativeBuildInputs or [ pyprev.setuptools ]) ++ [
-                #  ]);
-                #});
-                poetry-core = pyprev.poetry-core.overridePythonAttrs (old: rec {
-                  # poetry 1.2.0b1
-                  version = "1.1.0b3"; # poetry-core version is different from poetry
-                  src = final.fetchFromGitHub {
-                    owner = "python-poetry";
-                    repo = "poetry-core";
-                    rev = version;
-                    sha256 = "sha256-clQw8twOUYL8Ew/FioKwOIJwIhsVPuyF5McVR2zzrO4=";
-                  };
-                  doCheck = false;
-                  postPatch = nixpkgs.lib.optionalString (nixpkgs.lib.versionOlder final.python.version "3.8") ''
-                    # remove >1.0.3
-                    substituteInPlace pyproject.toml \
-                      --replace 'importlib-metadata = {version = "^1.7.0", python = "~2.7 || >=3.5, <3.8"}' \
-                        'importlib-metadata = {version = ">=1.7.0", python = "~2.7 || >=3.5, <3.8"}'
-                  '';
-
-                  nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [
-                    #pyfinal.intreehooks
-                  ];
-
-                  propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ nixpkgs.lib.optionals (nixpkgs.lib.versionOlder final.python.version "3.8") [
-                    #`pyfinal.importlib-metadata
-                  ] ++ nixpkgs.lib.optionals pyfinal.isPy27 [
-                    pyfinal.pathlib2
-                    pyfinal.typing
-                  ];
-
-                  checkInputs = [
-                    nixpkgs.git
-                    pyfinal.pep517
-                    pyfinal.pytest-mock
-                    pyfinal.pytestCheckHook
-                    pyfinal.tomlkit
-                    pyfinal.virtualenv
-                  ];
-                  # 1.1.13
-                  # "Vendor" dependencies (for build-system support)
-                  #postPatch = ''
-                  #  echo "import sys" >> poetry/__init__.py
-                  #  for path in $propagatedBuildInputs; do
-                  #      echo "sys.path.insert(0, \"$path\")" >> poetry/__init__.py
-                  #  done
-                  #'';
-
-                  ## Propagating dependencies leads to issues downstream
-                  ## We've already patched poetry to prefer "vendored" dependencies
-                  #postFixup = ''
-                  #  rm $out/nix-support/propagated-build-inputs
-                  #'';
-                });
-                poetry-plugin-export = pyprev.buildPythonPackage rec {
-                  pname = "poetry-plugin-export";
-                  version = "1.0.5";
-                  src = pyfinal.fetchPypi {
-                    inherit pname version;
-                    hash = "sha256-53likuqvrBMWFJ86gHCSPCoiFMmNBG3hJGtNjrCwyEs=";
-                  };
-                  nativeBuildInputs = [ pyfinal.pythonRelaxDepsHook ];
-                  pythonRemoveDeps = [ "poetry" ];
-                  buildInputs = [
-                    pyfinal.poetry-core
-                  ];
-                  doCheck = false;
-                };
-
-                ## pymc4
-                pymc = pyprev.pymc.overridePythonAttrs (old: rec {
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
-                    pyfinal.mkl-service
-                    #    pyfinal.aeppl
-                  ]);
-                });
-                pymc-nightly =
-                  let
-                    blas = final.blas_custom; # not prev.blas
-                    lapack = final.lapack_custom; # not prev.lapack
-                    blasImplementation = nixpkgs.lib.nameFromURL blas.name "-";
-                    cfg = prev.writeTextFile {
-                      name = "site.cfg";
-                      text = (
-                        nixpkgs.lib.generators.toINI
-                          { }
-                          {
-                            ${blasImplementation} = {
-                              include_dirs = "${blas}/include";
-                              library_dirs = "${blas}/lib";
-                            } // nixpkgs.lib.optionalAttrs (blas.implementation == "mkl") {
-                              mkl_libs = "mkl_rt";
-                              lapack_libs = "";
-                            };
-                          }
-                      );
-                    };
-                  in
-                  pyprev.buildPythonPackage rec {
-                    pname = "pymc-nightly";
-                    version = "4.0.0b2.dev20220304";
-
-                    nativeBuildInputs = [ final.gfortran ];
-                    buildInputs = [ blas lapack ];
-                    enableParallelBuilding = true;
-                    preBuild = ''
-                      ln -s ${cfg} site.cfg
-                    '';
-
-                    meta.broken = false;
-
-                    src = pyprev.fetchPypi {
-                      inherit pname version;
-                      sha256 = "sha256-U5s/HL8h7hLAOXWFlyvmbToqiZfEfRes3i57L+eCSJs=";
-                    };
-
-                    propagatedBuildInputs = [
-                      pyfinal.arviz
-                      pyfinal.cachetools
-                      pyfinal.fastprogress
-                      pyfinal.h5py
-                      pyfinal.joblib
-                      pyfinal.packaging
-                      pyfinal.pandas
-                      pyfinal.patsy
-                      pyfinal.semver
-                      pyfinal.tqdm
-                      pyfinal.typing-extensions
-                      pyfinal.jaxlib
-
-                      pyfinal.cloudpickle
-
-                      pyfinal.aeppl
-                      pyfinal.aesara
-                      pyfinal.numpy
-                      blas
-                      lapack
-                      pyfinal.mkl-service
-                    ];
-
-                    # From the pymc3 Nix package:
-                    # “The test suite is computationally intensive and test failures are not
-                    # indicative for package usability hence tests are disabled by default.”
-                    doCheck = false;
-                    pythonImportsCheck = [ "pymc" ];
-
-                    # From the pymc3 Nix package:
-                    # “For some reason tests are run as a part of the *install* phase if
-                    # enabled.  Theano writes compiled code to ~/.theano hence we set
-                    # $HOME.”
-                    preInstall = "export HOME=$(mktemp -d)";
-                    postInstall = "rm -rf $HOME";
-
-                    checkInputs = with pyprev; [ pytest pytest-cov ];
-                  };
-
-                python_selected = prev.python39;
-
-                # pythran needed by scipy
-                pythran = pyprev.pythran.overridePythonAttrs (old: rec {
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ pyprev.gast ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.gast_5 ]);
-                  # needed for scipy 0.18.1
-                  #pname = "pythran";
-                  #version = "0.10.0";
-
-                  #src = final.fetchFromGitHub {
-                  #  owner = "serge-sans-paille";
-                  #  repo = "pythran";
-                  #  rev = version;
-                  #  sha256 = "sha256-BLgMcK07iuRPBJqQpLXGnf79KgRsTqygCSeusLqkfxc=";
-                  #};
-                });
-
-                pyzmq = pyprev.pyzmq.overridePythonAttrs (old: rec {
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
-                    pyfinal.packaging
-                    #    pyfinal.aeppl
-                  ]);
-                });
-
-                scipy = pyprev.scipy.overridePythonAttrs (old: {
-                  doCheck = false;
-                });
-
-                tensorflow-gpu = (pyprev.tensorflow.overridePythonAttrs (old: { # tensorflow-gpu doesn't exist! Always search at hound!
-                #  #buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ pyfinal.tensorboard ]);
-                #  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ pyfinal.tensorboard ]);
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.pydot pyfinal.graphviz ]); # pyprev.gast pyfinal.gast_4 
-                })).override {
-                  cudaSupport = true;
-                  mklSupport = true;
-                  mkl = final.mkl;
-                };
-
-                tensorflow-io-gcs-filesystem = pyprev.tensorflow-io-gcs-filesystem.overridePythonAttrs (old: {
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.numpy ]);
-                  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ final.libtensorflow ]);
-                });
-
-                # needed for pymc3
-                theano-pymc = pyprev.theano-pymc.overridePythonAttrs (old:
-                  let
-                    wrapped = command: buildTop: buildInputs:
-                      final.runCommandCC "${command}-wrapped" { inherit buildInputs; } ''
-                        type -P '${command}' || { echo '${command}: not found'; exit 1; }
-                        cat > "$out" <<EOF
-                        #!$(type -P bash)
-                        $(declare -xp | sed -e '/^[^=]\+="\('"''${NIX_STORE//\//\\/}"'\|[^\/]\)/!d')
-                        declare -x NIX_BUILD_TOP="${buildTop}"
-                        $(type -P '${command}') "\$@"
-                        EOF
-                        chmod +x "$out"
-                      '';
-
-                    # Theano spews warnings and disabled flags if the compiler isn't named g++
-                    cxx_compiler_name =
-                      if final.stdenv.cc.isGNU then "g++" else
-                      if final.stdenv.cc.isClang then "clang++" else
-                      throw "Unknown C++ compiler";
-                    cxx_compiler = wrapped cxx_compiler_name "\\$HOME/.theano"
-                      ([ pyfinal.libgpuarray final.cudaPackages_11_6.cudnn final.cudaPackages_11_6.cudatoolkit ]);
-
-                  in
-                  {
-                    postPatch = ''
-                      substituteInPlace theano/configdefaults.py \
-                        --replace 'StrParam(param, is_valid=warn_cxx)' 'StrParam('\'''${cxx_compiler}'\''', is_valid=warn_cxx)' \
-                        --replace 'rc == 0 and config.cxx != ""' 'config.cxx != ""'
-                      substituteInPlace theano/configdefaults.py \
-                        --replace 'StrParam(get_cuda_root)' 'StrParam('\'''${final.cudaPackages_11_6.cudatoolkit}'\''')'
-                      substituteInPlace theano/configdefaults.py \
-                        --replace 'StrParam(default_dnn_base_path)' 'StrParam('\'''${final.cudaPackages_11_6.cudnn}'\''')'
-                    '';
-
-                    # needs to be postFixup so it runs before pythonImportsCheck even when
-                    # doCheck = false (meaning preCheck would be disabled)
-                    postFixup = ''
-                      mkdir -p check-phase
-                      export HOME=$(pwd)/check-phase
-                    '';
-                    #preConfigure = 
-                    #''
-                    #  export CC=${final.cudaPackages.cudatoolkit.cc}/bin/gcc CXX=${final.cudaPackages.cudatoolkit.cc}/bin/g++
-                    #  export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${nixpkgs.lib.makeLibraryPath [ final.cudaPackages.cudatoolkit "${final.cudaPackages.cudatoolkit}" ]}"
-                    #  export CUDNN_INCLUDE_DIR=${final.cudaPackages.cudnn}/include
-                    #''; # enableCuda ${cudatoolkit}/targets/x86_64-linux/lib
-
-                    #  # patchelf --set-rpath "${lib.makeLibraryPath [ stdenv.cc.cc.lib ]}"
-                    #preFixup =  ''
-                    #  # For some reason pytorch retains a reference to libcuda even if it
-                    #  # is explicitly disabled with USE_CUDA=0.
-                    #  find $out -name "*.so" -exec ${nixpkgs.patchelf}/bin/patchelf --remove-needed libcuda.so.1 {} \;
-                    #'';
-                    propagatedBuildInputs = [
-                      pyfinal.libgpuarray
-                      pyfinal.numpy
-                      pyfinal.numpy.blas
-                      pyfinal.scipy
-                      pyfinal.setuptools
-                      #pyfinal.six
-                      pyfinal.pandas
-                      pyfinal.filelock
-                      final.cudaPackages_11_6.cudatoolkit
-                      final.cudaPackages_11_6.cudnn
-                    ];
-                  });
-
-                traitlets = pyprev.traitlets.overridePythonAttrs (old: {
-                  propagatedBuildInputs = (old.propagatedBuildInputs or [ ]) ++ [ pyfinal.hatchling pyfinal.numpy ];
-                });
-
-                # jupyterWith also uses six causing six package collision in closure
-                #six = pyprev.six.overridePythonAttrs (old: rec {
-                #  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ pyprev.setuptools ]) ((old.nativeBuildInputs or [ ]) ++ [
-                #  ]);
-                #});
-
-                xarray-einstats = pyprev.xarray-einstats.overridePythonAttrs (old: {
-                  buildInputs = (old.buildInputs or [ ]) ++ [ pyfinal.flit-core ];
-                });
-                ###############################################################
-                #logical-unification = pyprev.buildPythonPackage rec {
-                #  pname = "logical-unification";
-                #  version = "0.4.5";
-
-                #  propagatedBuildInputs = [ pyfinal.multipledispatch pyfinal.toolz ];
-
-                #  src = pyprev.fetchPypi {
-                #    inherit pname version;
-                #    sha256 = "sha256-fGpsG3xrqg9bmvk/Bs/I0kGba3kzRrZ47RNnwFznRVg=";
-                #  };
-
-                #  doCheck = false;
-                #};
-
-                #cons = pyprev.buildPythonPackage rec {
-                #  pname = "cons";
-                #  version = "0.4.5";
-
-                #  propagatedBuildInputs = [ pyfinal.logical-unification ];
-
-                #  src = pyprev.fetchPypi {
-                #    inherit pname version;
-                #    sha256 = "sha256-tGtIrbWlr39EN12jRtkm5VoyXU3BK5rdnyAoDTs3Qss=";
-                #  };
-
-                #  doCheck = false;
-                #};
-
-                #etuples = pyprev.buildPythonPackage rec {
-                #  pname = "etuples";
-                #  version = "0.3.4";
-
-                #  propagatedBuildInputs = [ pyfinal.cons ];
-
-                #  src = pyprev.fetchPypi {
-                #    inherit pname version;
-                #    sha256 = "sha256-mAUTeb0oTORi2GjkTDiaIiBrNcSVztJZBBrx8ypUoKM=";
-                #  };
-
-                #  doCheck = false;
-                #};
-
-                #aesara =
-                #  let
-                #    blas = final.blas_custom; # not prev.blas
-                #    lapack = final.lapack_custom; # not prev.lapack
-                #    blasImplementation = nixpkgs.lib.nameFromURL blas.name "-";
-                #    cfg = prev.writeTextFile {
-                #      name = "site.cfg";
-                #      text = (
-                #        nixpkgs.lib.generators.toINI
-                #          { }
-                #          {
-                #            ${blasImplementation} = {
-                #              include_dirs = "${blas}/include";
-                #              library_dirs = "${blas}/lib";
-                #            } // nixpkgs.lib.optionalAttrs (blasImplementation == "mkl") {
-                #              mkl_libs = "mkl_rt";
-                #              lapack_libs = "";
-                #            };
-                #          }
-                #      );
-                #    };
-                #    wrapped = command: buildTop: buildInputs:
-                #      final.runCommandCC "${command}-wrapped" { inherit buildInputs; } ''
-                #        type -P '${command}' || { echo '${command}: not found'; exit 1; }
-                #        cat > "$out" <<EOF
-                #        #!$(type -P bash)
-                #        $(declare -xp | sed -e '/^[^=]\+="\('"''${NIX_STORE//\//\\/}"'\|[^\/]\)/!d')
-                #        declare -x NIX_BUILD_TOP="${buildTop}"
-                #        $(type -P '${command}') "\$@"
-                #        EOF
-                #        chmod +x "$out"
-                #      '';
-
-                #    # Theano spews warnings and disabled flags if the compiler isn't named g++
-                #    cxx_compiler_name =
-                #      if final.stdenv.cc.isGNU then "g++" else
-                #      if final.stdenv.cc.isClang then "clang++" else
-                #      throw "Unknown C++ compiler";
-                #    cxx_compiler = wrapped cxx_compiler_name "\\$HOME/.theano"
-                #      ([ final.cudaPackages_11_6.cudnn final.cudaPackages_11_6.cudatoolkit ]);
-
-                #  in
-                #  #pyprev.buildPythonPackage rec {
-                #  pyprev.aesara.overrideAttrs (old: {
-                #    #$prePhases unpackPhase patchPhase $preConfigurePhases configurePhase $preBuildPhases buildPhase checkPhase $preInstallPhases installPhase fixupPhase installCheckPhase $preDistPhases distPhase $postPhases
-                #    #pname = "aesara";
-                #    #version = "2.6.6";
-                #    postPatch = ''
-                #      substituteInPlace aesara/configdefaults.py \
-                #        --replace 'StrParam(param, is_valid=warn_cxx)' 'StrParam('\'''${cxx_compiler}'\''', is_valid=warn_cxx)' \
-                #        --replace 'rc == 0 and config.cxx != ""' 'config.cxx != ""'
-                #      substituteInPlace aesara/configdefaults.py \
-                #        --replace 'StrParam(get_cuda_root)' 'StrParam('\'''${final.cudaPackages_11_6.cudatoolkit}'\''')'
-                #      substituteInPlace aesara/configdefaults.py \
-                #        --replace 'StrParam(default_dnn_base_path)' 'StrParam('\'''${final.cudaPackages_11_6.cudnn}'\''')'
-                #    '';
-
-                #    preBuild = ''
-                #      ln -s ${cfg} site.cfg
-                #    '';
-
-                #    # needs to be postFixup so it runs before pythonImportsCheck even when
-                #    # doCheck = false (meaning preCheck would be disabled)
-                #    postFixup = ''
-                #      mkdir -p check-phase
-                #      export HOME=$(pwd)/check-phase
-                #    '';
-
-                #    buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [
-                #      blas
-                #      lapack
-                #    ]);
-                #    propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
-                #      blas
-                #      lapack
-                #      pyfinal.mkl-service
-                #    #  pyfinal.minikanren #miniKanren
-                #    #  pyfinal.cons
-                #    #  pyfinal.typing-extensions
-
-                #    #  pyfinal.numpy
-                #    #  pyfinal.numpy.blas
-                #    #  pyfinal.scipy
-                #    #  pyfinal.filelock
-
-                #    #  #pyfinal.libgpuarray
-                #    #  pyfinal.setuptools
-                #    #  #pyfinal.six
-                #    #  pyfinal.pandas
-                #    #  pyfinal.jaxlib
-                #    #  final.cudaPackages_11_6.cudatoolkit
-                #    #  final.cudaPackages_11_6.cudnn
-                #    ]);
-                #    #src = pyprev.fetchPypi {
-                #    #  inherit pname version;
-                #    #  sha256 = "sha256-wC7UW/j31NHKrH/8LSC1MN0fJtvtvUNax2ckRuJtGVA=";
-                #    #};
-
-                #    #doCheck = false;
-                #  });
-
-                ############################################################################################
-
-                # poetry - virtualenv - cython -> ModuleNotFoundError: No module named 'setuptools'
-                # pyparsing - setuptools - setuptools-scm -> error: infinite recursion encountered
-                #nbformat = pyfinal.python_selected.pkgs.nbformat.override {
-                #  inherit (pyfinal)
-                #    pytest
-                #    ipython_genutils
-                #    testpath
-                #    jsonschema
-                #    jupyter_core
-                #    ;
-                #};
-                nbformat = pyprev.nbformat.overridePythonAttrs (old: {
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ 
-                    pyfinal.flit-core 
-                    pyfinal.hatchling 
-                    pyfinal.hatch-vcs
-                    pyfinal.importlib-metadata
-                  ]);
-                });
-                setuptools = (pyfinal.python_selected.pkgs.setuptools.overridePythonAttrs (old: {
-                  catchConflicts = false;
-                  format = "other";
-                })).override {
+                # My guess : poetry2nix makes one of duplicated packges to null 
+                # Here, jupyter_core, jupyter-core are duplicated so make jupyter_core null
+                # Solution : bring jupyter_core back like below 
+                #jupyter_core = pyprev.jupyter-core;
+                # Nope, below is better
+                #jupyter_core = (pyfinal.python_selected.jupyter_core.override {
+                jupyter_core = (pkgs_2211.python39Packages.jupyter_core.override {
+                # 5.0.0 : nixos-22.11<
                   inherit (pyfinal)
-                    bootstrapped-pip
-                    pipInstallHook;
-                    #setuptoolsBuildHook
-                };
-                # With this, skipSetupToolsSCM in mk-poetry-dep.nix is not needed
-                setuptools-scm = pyfinal.python_selected.pkgs.setuptools-scm.override {
-                  inherit (pyfinal)
-                    packaging
-                    tomli
-                    #typing-extensions
-                    setuptools;
-                };
+                    hatchling
+                    traitlets
+                    pytestCheckHook
+                  ;
+                }).overridePythonAttrs (old: rec {
+                  #version = pyprev.jupyter-core.version;
+                  #src = pyprev.jupyter-core.src;
+                  #version = pyprev.jupyter_core.version;
+                  #src = pyprev.jupyter_core.src;
+                  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ pyfinal.platformdirs ]);
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.platformdirs ]);
+                });
 
-                # nbdev <- fastcore, ghapi dependency : stack overflow (possible infinite recursion)
-                pip = pyfinal.python_selected.pkgs.pip.override {
+                jupyter-core = pyfinal.jupyter_core;
+
+                matplotlib = (pyfinal.python_selected.matplotlib.override {
+                #matplotlib = (pkgs_2211.python39Packages.matplotlib.override {
+                # 3.6.2 : nixos-22.11<
                   inherit (pyfinal)
-                    bootstrapped-pip
+                    pycairo
+                    cycler
+                    python-dateutil
+                    numpy
+                    pyparsing
+                    sphinx
+                    tornado
+                    kiwisolver
                     mock
-                    scripttest
-                    virtualenv
-                    pretend
-                    pytest
-                    pip-tools;
-                };
-
-                nbdev = pyprev.nbdev.overridePythonAttrs (old: rec {
-                  # buildInputs, nativeBuildInputs, propagatedNativeBuildInputs doesn't work.
+                    pytz
+                    pygobject3
+                    certifi
+                    pillow
+                    fonttools
+                    setuptools-scm
+                    setuptools-scm-git-archive
+                    packaging
+                    tkinter
+                    pyqt5
+                  ;
+                }).overridePythonAttrs (old: rec {
+                  version = pyprev.matplotlib.version;
+                  src = pyprev.matplotlib.src;
                   buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [
-                    self.packages.x86_64-linux.quarto
+                    final.ghostscript
                   ]);
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
-                    pyfinal.twine
-                  ]);
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.contourpy ]);
                 });
 
-                #fastcore = pyfinal.python_selected.pkgs.fastcore.override {
+                #  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ final. ]);
+                #  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ final. ]);
+                #  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal. ]);
+                #});
+
+                # = (pyfinal.python_selected..override {
+                #meson-python = (pkgs_2211.python39Packages.meson-python.override {
+                ### 1.23.0 : nixos-22.05< <22.11<
+                ##  inherit (pyfinal)
+                ##  ;
+                #}).overridePythonAttrs (old: rec {
+                #  version = pyprev.meson-python.version;
+                #  src = pyprev.meson-python.src;
+                #});
+
+                #nbclient = (pyfinal.python_selected.nbclient.override {
+                nbclient = (pkgs_2211.python39Packages.nbclient.override {
+                # 0.7.0 : nixos-22.11<
+                  inherit (pyfinal)
+                    async_generator
+                    ipykernel
+                    ipywidgets
+                    jupyter-client
+                    nbconvert
+                    nbformat
+                    nest-asyncio
+                    pytest-asyncio
+                    pytestCheckHook
+                    traitlets
+                    xmltodict
+                  ;
+                }).overridePythonAttrs (old: rec {
+                  version = pyprev.nbclient.version;
+                  src = pyprev.nbclient.src;
+                });
+
+                #nbdev = pyprev.nbdev.overridePythonAttrs (old: rec {
+                #  # buildInputs, nativeBuildInputs, propagatedNativeBuildInputs doesn't work.
+                #  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [
+                #    self.packages.x86_64-linux.quarto
+                #  ]);
+                #  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
+                #    pyfinal.twine
+                #  ]);
+                #});
+
+                #nbformat = (pyfinal.python_selected.nbformat.override {
+                nbformat = (pkgs_2211.python39Packages.nbformat.override {
+                # 5.7.0 : nixos-22.11
+                  inherit (pyfinal)
+                    hatchling
+                    hatch-nodejs-version
+                    fastjsonschema
+                    jsonschema
+                    jupyter_core
+                    traitlets
+                    pep440
+                    testpath
+                  ;
+                  pytestCheckHook = null;
+                  #hatch-nodejs-version = pkgs_2211.python39Packages.hatch-nodejs-version;
+                }).overridePythonAttrs (old: rec {
+                  version = pyprev.nbformat.version;
+                  src = pyprev.nbformat.src;
+                });
+
+                ##numba = pkgs_2211.python39Packages.numba.override {
+                #numba = pyfinal.python_selected.numba.override {
                 #  inherit (pyfinal)
-                #    ipython
-                #    traitlets
-                #    mock
-                #    pytestCheckHook
-                #    nose
-                #  ;
+                #    numpy
+                #    setuptools
+                #    llvmlite;
+                #    #importlib-metadata;
+                #  python = pyfinal.python_selected;
+                #  cudaPackages = final.cudaPackages;
+                #  cudaSupport = true;
                 #};
-                #ghapi = pyfinal.python_selected.pkgs.ghapi.override {
+
+                #numpy = (pkgs_2211.python39Packages.numpy.override {
+                # glibc_2.35 not found 
+                numpy = (pyfinal.python_selected.numpy.override {
+                # 1.23.0 : nixos-22.05< <22.11
+                  inherit (pyfinal)
+                    python
+                    hypothesis
+                    pytest
+                    #typing-extensions
+                    cython
+                  ;
+                  blas = final.blas_custom; # not prev.blas
+                  lapack = final.lapack_custom; # not prev.blas
+                }).overridePythonAttrs (old: rec {
+                  version = pyprev.numpy.version;
+                  src = pyprev.numpy.src;
+                });
+
+                # poetry.lock : 7.0.0 , nix repl : 8.0.0 because apache-beam (2.40.0) depends on pyarrow (>=0.15.1,<8.0.0)
+                #pyarrow = pyfinal.python_selected.pyarrow.override {
                 #  inherit (pyfinal)
-                #    ipython
-                #    traitlets
-                #    mock
+                #    cffi
+                #    cloudpickle
+                #    cython
+                #    fsspec
+                #    hypothesis
+                #    numpy
+                #    pandas
                 #    pytestCheckHook
-                #    nose
-                #  ;
+                #    pytest-lazy-fixture
+                #    scipy
+                #    setuptools-scm
+                #    six;
+                #  python = pyfinal.python_selected;
                 #};
 
-                # matplotlib : lib.optional should be fixed to lib.optionals
-                matplotlib = pyprev.matplotlib.overridePythonAttrs (old: rec {
-                  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ 
-                    pyfinal.setuptools-scm
-                    pyfinal.setuptools-scm-git-archive
-                  ]);
-                });
-                contourpy = pyprev.contourpy.overridePythonAttrs (old: rec {
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.pybind11 ]);
-                });
+                # = (pyfinal.python_selected..override {
+                # = (pkgs_2211.python39Packages..override {
+                ## 1.23.0 : nixos-22.05< <22.11<
+                #  inherit (pyfinal)
+                #  ;
+                #}).overridePythonAttrs (old: rec {
+                #  version = pyprev..version;
+                #  src = pyprev..src;
+                #});
 
-                # needed by requests needed by twine
-                idna = pyprev.idna.overridePythonAttrs (old: rec {
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.flit-core ]);
+                # = (pyfinal.python_selected..override {
+                poetry = (pkgs_2211.python39Packages.poetry.override {
+                # 1.2.2 : nixos-22.05< <22.11<
+                  #inherit (pyfinal)
+                  #;
+                }).overridePythonAttrs (old: rec {
+                #  version = pyprev..version;
+                #  src = pyprev..src;
                 });
 
                 PyTDC = pyprev.pytdc;
+                
+                pytorch = pyfinal.torch;
 
-                quarto = pyprev.quarto.override {
-                  preferWheel = true;
-                };
-
-                rdkit = pyprev.rdkit-pypi;
-
-                jeepney = pyprev.jeepney.overridePythonAttrs (old: rec {
-                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.outcome pyfinal.trio ]);
+                #scipy = pyprev.scipy.overridePythonAttrs (old: rec {
+                #  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ final. ]);
+                #  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ pkgs_2211.python39Packages.meson-python final.pkg-config ]);
+                #  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal. ]);
+                #});
+                #scipy = (pkgs_2211.python39Packages.scipy.override {
+                scipy = (pyfinal.python_selected.scipy.override {
+                # 1.9.3 : nixos-22.11< # not working
+                # 1.9.1 : nixos-22.11 # not working
+                # 1.8.0 : nixos-22.05
+                  inherit (pyfinal)
+                    python
+                    cython
+                    pythran
+                    #meson-python
+                    nose
+                    pytest
+                    pytest-xdist
+                    numpy
+                    pybind11
+                  ;
+                  #meson-python = pkgs_2211.python39Packages.meson-python;
+                }).overridePythonAttrs (old: rec {
+                  #version = pyprev.scipy.version; # format issue
+                  #src = pyprev.scipy.src;
                 });
 
-                jupyter_core = pyfinal.python_selected.pkgs.jupyter_core.override {
+                seaborn = pyprev.seaborn.overridePythonAttrs (old: rec {
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.flit-core ]);
+                });
+
+                #tensorboard : tensorflow in pyproproject
+
+                #tensorflow-gpu = (pkgs_2211.python39Packages.tensorflow.override {
+                tensorflow-gpu = (pyfinal.python_selected.tensorflowWithCuda.override {
+                # 2.10.0 : nixos-22.11
+                # failed :Compiling tensorflow/lite/delegates/telemetry.cc failed: (Exit 1): crosstool_wrapper_driver_is_not_gcc failed:
+                # 2.8.1 : nixos-22.05
+                #bazel_5, buildBazelPackage, isPy3k, lib, fetchFromGitHub, symlinkJoin
+                #which binutils perl
+                ## Common libraries
+                #jemalloc mpi grpc sqlite boringssl jsoncpp nsync
+                #curl snappy lmdb-core icu double-conversion libpng libjpeg_turbo giflib;
+
                   inherit (pyfinal)
-                    ipython
-                    traitlets
-                    mock
-                    pytestCheckHook
-                    nose
-                  ;
-                };
-                jupyter-core = pyfinal.jupyter_core; # Not pyprev!!
+                    python
+                    pybind11 cython
+                    numpy tensorboard absl-py
+                    #packaging
+                    setuptools wheel keras keras-preprocessing google-pasta
+                    opt-einsum astunparse h5py
+                    termcolor grpcio six wrapt tensorflow-estimator
+                    dill portpicker tblib typing-extensions
+                    gast;
+                  #glibcLocales = pkgs_2211.glibcLocales;
+                  protobuf-python = pyfinal.protobuf;
+                  protobuf-core = final.protobuf;
+                  flatbuffers-python = pyfinal.flatbuffers;
+                  flatbuffers-core = final.flatbuffers;
+                  mklSupport = true;
+                  mkl = final.mkl;
+                }).overridePythonAttrs (old: {
+                  #nativeBuildInputs = builtins.filter (x: ! builtins.elem (x.name or x.pname or "") [ "hook" ]) ((old.nativeBuildInputs or [ ]) ++ [
+                    #pyfinal.setuptools # for pkgs_2211?
+                  #]);
+                  #dontUsePipInstall = true; # doesn't work
+                  #version = pyprev.tensorflow-gpu.version; # can't read setup.py
+                  #src = pyprev.tensorflow-gpu.src;
+                });
+
+                tensorflow-datasets = pyprev.tensorflow-datasets.overridePythonAttrs (old: rec {
+                  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [  ]) ++ [
+                    pyfinal.tensorflow-gpu
+                  ]);
+                });
+
+                tensorflow-io-gcs-filesystem = pyprev.tensorflow-io-gcs-filesystem.overridePythonAttrs (old: {                                                                                                                     propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal.numpy ]);                                                                                    buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ final.libtensorflow ]);                                                                                                });
+
+                #tensorflow-metadata = (pyfinal.python_selected.tensorflow-metadata.overridePythonAttrs (old: rec {
+                tensorflow-metadata = pyprev.tensorflow-metadata.overridePythonAttrs (old: rec {
+                  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ pyfinal.pythonRelaxDepsHook ]);
+                  pythonRelaxDeps = [ "protobuf" ];
+                });
+
                 termcolor = pyprev.termcolor.overridePythonAttrs (old: rec {
                   propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [
                     pyfinal.hatchling
@@ -917,41 +785,143 @@
                   ]);
                 });
 
-                torch = (pyfinal.python_selected.pkgs.pytorch.override {
-                  cudaSupport = true;
-                  MPISupport = true;
-                  blas = final.blas_custom;
-                  cudaPackages = final.cudaPackages_11_6;
-                  inherit (final)
-                    magma
-                    mpi
-                  ;
-                  inherit (pyfinal)
-                    # Native build inputs
-                    pybind11
-                    # Propagated build inputs
-                    numpy
-                    pyyaml
-                    cffi
-                    click
-                    typing-extensions
-                    # Unit tests
-                    hypothesis
-                    psutil
-                    # dependencies for torch.utils.tensorboard
-                    pillow
-                    six
-                    future
-                    tensorboard
-                    protobuf
-                  ;
-                }).overridePythonAttrs (old: rec {
-                  USE_SYSTEM_BIND11 = true;
-                  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [
-                    pyfinal.pybind11
-                  ]);
+                torch = (pyprev.torch.override {
+                  inherit cudatoolkit; 
+                  #cudatoolkit = final.cudaPackages_11_6.cudatoolkit; 
+                  enableCuda = true;
+                }).overrideAttrs (old: rec {
+                  buildInputs = [
+                    pyfinal.setuptools-scm
+                    pyfinal.typing-extensions
+                    final.linuxPackages.nvidia_x11
+                    final.cudaPackages_11_6.nccl.dev
+                    final.cudaPackages_11_6.nccl.out
+                  ];
+                #  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ final. ]);
+                #  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal. ]);
                 });
-                xgboost = pyfinal.python_selected.pkgs.xgboost.override {
+
+                # nixos-22.11 : CHANGES NAME TO pyfinal.python_selected.torch!
+                #torch = (pyfinal.python_selected.pytorch.override {
+                #torch = (pkgs_2211.python39Packages.torch.override {
+                ## 1.12.1 : nixos-22.11
+                #  inherit (final)
+                #    magma
+                #    mpi
+                #    cudaPackages
+                #  ;
+                #  inherit (pyfinal)
+                #    # Native build inputs
+                #    pybind11
+                #    # Propagated build inputs
+                #    numpy
+                #    pyyaml
+                #    cffi
+                #    click
+                #    typing-extensions
+                #    # Unit tests
+                #    hypothesis
+                #    psutil
+                #    # dependencies for torch.utils.tensorboard
+                #    pillow
+                #    six
+                #    future
+                #    tensorboard
+                #    protobuf
+                #  ;
+                #  blas = final.blas_custom;
+                #  MPISupport = true;
+                #}).overridePythonAttrs (old: rec {
+                #  # needed for 22.05 https://github.com/NixOS/nixpkgs/pull/175962
+                #  USE_SYSTEM_BIND11 = true;
+                #  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [
+                #    #pyfinal.pybind11
+                #    pyfinal.typing-extensions
+                #  ]);
+                #  #version = pyprev.torch.version;
+                #  #src = pyprev.torch.src;
+                #});
+
+                #cu113 not working : changed to cu116
+                #torch = (pyfinal.python_selected.pytorch-bin.override {
+                #torch = (pkgs_2211.python39Packages.torch-bin.override {
+                ## 1.12.1 : nixos-22.11
+                #  inherit (pyfinal)
+                #    python
+                #    future
+                #    numpy
+                #    pyyaml
+                #    requests
+                #    setuptools
+                #    typing-extensions
+                #  ;
+                #}).overridePythonAttrs (old: rec {
+                ##  # needed for 22.05 https://github.com/NixOS/nixpkgs/pull/175962
+                ##  USE_SYSTEM_BIND11 = true;
+                ##  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [
+                ##    pyfinal.pybind11
+                ##  ]);
+                #  version = pyprev.torch.version;
+                #  src = pyprev.torch.src;
+                #})
+
+                #torch = nixpkgs.lib.makeOverridable
+                #  ({ enableCuda ? true
+                #   , cudatoolkit ? cudatoolkit
+                #   , pkg ? pyprev.torch
+                #   }: pkg.overrideAttrs (old:
+                #    {
+                #      preConfigure =
+                #        if (!enableCuda) then ''
+                #          export USE_CUDA=0
+                #        '' else ''
+                #          export LD_LIBRARY_PATH="$LD_LIBRARY_PATH:${cudatoolkit}/targets/x86_64-linux/lib"
+                #        '';
+                #      preFixup = lib.optionalString (!enableCuda) ''
+                #        # For some reason pytorch retains a reference to libcuda even if it
+                #        # is explicitly disabled with USE_CUDA=0.
+                #        find $out -name "*.so" -exec ${pkgs.patchelf}/bin/patchelf --remove-needed libcuda.so.1 {} \;
+                #      '';
+                #      buildInputs =
+                #        (old.buildInputs or [ ])
+                #        ++ [ self.typing-extensions ]
+                #        ++ lib.optionals enableCuda [
+                #          pkgs.linuxPackages.nvidia_x11
+                #          pkgs.nccl.dev
+                #          pkgs.nccl.out
+                #        ];
+                #      propagatedBuildInputs = [
+                #        self.numpy
+                #        self.future
+                #        self.typing-extensions
+                #      ];
+                #    })
+                #  )
+                #  { };
+
+                
+                #torch-scatter = pyprev.torch-scatter.overridePythonAttrs (old: rec {
+                #  BUILD_NAMEDTENSOR = "1";
+                #  USE_MKLDNN = "1";
+                #  USE_MKLDNN_CBLAS = "1";
+                #  USE_SYSTEM_BIND11 = "1";
+                #  USE_SYSTEM_NCCL = "1";
+                #  uildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ cudnn final.magma nccl final.numactl ]);
+                #  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ cudatoolkit_joined ]);
+                #  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ final.mpi ]);
+                #});
+
+                quarto = pyprev.quarto.override {
+                  preferWheel = true;
+                };
+
+                xarray-einstats = pyprev.xarray-einstats.overridePythonAttrs (old: {
+                  buildInputs = (old.buildInputs or [ ]) ++ [ pyfinal.flit-core ];
+                });
+
+                # = (pyfinal.python_selected..override {
+                xgboost = (pkgs_2211.python39Packages.xgboost.override {
+                # 1.23.0 : nixos-22.05< <22.11
                   inherit (pyfinal)
                     pytestCheckHook
                     scipy
@@ -961,229 +931,82 @@
                     graphviz
                     datatable
                     hypothesis
-                    ;
-                };
+                  ;
+                }).overridePythonAttrs (old: rec {
+                  version = pyprev.xgboost.version;
+                  src = pyprev.xgboost.src;
+                });
 
-                # Without tqdm, numpy build error occurs
-                #tqdm = final.python3.pkgs.tqdm.overridePythonAttrs (old: rec {
-                #  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ pyprev.numpy ]); #pyfinal.toml 
-                #});
               }));
           });
-          #polynote = final.stdenv.mkDerivation rec {
-          #  pname = "polynote";
-          #  version = "0.4.5";
-          #  src = builtins.fetchurl {
-          #    url = "https://github.com/polynote/polynote/releases/download/0.4.5/polynote-dist.tar.gz";
-          #    sha256 = "sha256:1m7braf2d9gmqz270xrj0w4bc3j58bz0mx3h1ik9p1221dz2xc1j"; #prev.lib.fakeSha256;
-          #  };
-          #  buildInputs = (with python_custom.pkgs; [ virtualenv ipython nbconvert numpy pandas jedi jep jsonschema ]);
-          #  patchPhase = ''
-          #    substituteInPlace polynote.py \
-          #      --replace 'os.path.dirname(os.path.realpath(__file__))' 'os.getcwd()' \
-          #      --replace 'p.joinpath("jep") for p in paths if p.joinpath("jep").exists()' '"${python_custom.pkgs.jep}/lib/python3.9/site-packages/jep"' \
-          #      --replace 'cmd = f"java' 'cmd = f"${final.openjdk8}/bin/java' \
-          #      --replace '-Djava.library.path={jep_path}' '-Djava.library.path=${final.openjdk8}:${final.glibc}/lib:{jep_path}'
-          #  '';
-          #  installPhase = ''
-          #    mkdir -p $out/bin
-          #    cp polynote.py $out/bin/polynote
-          #    chmod +x $out/bin/polynote
-          #  '';
-          #};
-          python39 = prev.python39.override (old: {
-            # for jupyterWith!
-            packageOverrides = prev.lib.composeManyExtensions [
-              (old.packageOverrides or (_: _: { }))
-              (python-final: python-prev: {
-                #httplib2 = python-prev.httplib2.overridePythonAttrs (old: {
-                #  doCheck = false;
-                #});
-                numpy = python-prev.numpy.overridePythonAttrs (old:
-                  let
-                    blas = final.mkl; # not prev.blas
-                    blasImplementation = nixpkgs.lib.nameFromURL blas.name "-";
-                    cfg = final.writeTextFile {
-                      name = "site.cfg";
-                      text = (
-                        nixpkgs.lib.generators.toINI
-                          { }
-                          {
-                            ${blasImplementation} = {
-                              include_dirs = "${blas}/include";
-                              library_dirs = "${blas}/lib";
-                            } // nixpkgs.lib.optionalAttrs (blasImplementation == "mkl") {
-                              mkl_libs = "mkl_rt";
-                              lapack_libs = "";
-                            };
-                          }
-                      );
-                    };
-                  in
-                  {
-                    nativeBuildInputs = (old.nativeBuildInputs or [ ]) ++ [ final.gfortran ];
-                    buildInputs = (old.buildInputs or [ ]) ++ [ blas ];
-                    enableParallelBuilding = true;
-                    preBuild = ''
-                      ln -s ${cfg} site.cfg
-                    '';
-                    passthru = old.passthru // {
-                      blas = blas;
-                      inherit blasImplementation cfg;
-                    };
-                  }
-                );
-              })
-            ];
-          });
         })
-
-        #(poetry2nix_nix_community.overlay)
-
-        #(final: pyprev: {
-        #  # The application
-        #  myapp = pyprev.poetry2nix.mkPoetryApplication {
-        #    projectDir = ./.;
+      ] ++ (builtins.attrValues jupyterWith.overlays)
+        #++ [
+        #(final: prev: {
+        #  jupyterWith_python_custom = final.jupyterWith.override {
+        #    python3 = self.python_custom.x86_64-linux;
         #  };
         #})
-        #jupyterWith.overlays.jupyterWith
-        #jupyterWith.overlays.haskell
-        #jupyterWith.overlays.python
-      ] ++ (builtins.attrValues jupyterWith.overlays)
-        #++ [ dpaetzel.pymc4 ] 
-        ++ [
-        (final: prev: {
-          jupyterWith_python_custom = final.jupyterWith.override {
-            python3 = self.python_custom.x86_64-linux;
-            #python3 = self.python_custom.x86_64-linux.pkgs.python39.pkgs;
-          };
-        })
-        ]
+        #]
       );
-    } // (flake-utils.lib.eachSystem [ "x86_64-linux" "x86_64-darwin" ] (system: # appending behind output
+    } // (flake-utils.lib.eachDefaultSystem (system: 
       rec
       {
+        #jupyterWith_custom = jupyterWith.;
+
         pkgs = import nixpkgs {
-          inherit system; #system = "x86_64-linux";
+          inherit system;
           config.allowUnfree = true;
           config.cudaSupport = true;
+          config.mklSupport = true;
           overlays = [ self.overlay ];
-          #overlays = (builtins.attrValues jupyterWith.overlays) ++ [ self.overlay ]; # [ (import ./haskell-overlay.nix) ];
         };
 
         python_custom = pkgs.poetry2nix.mkPoetryEnv rec {
           projectDir = ./.;
           python = pkgs.python39;
           editablePackageSources = {
-            mypackages = ~/Jupyter_Python; #./.; not working
+            mypackages = "~/Jupyter_Python"; #./.; not working
           };
-          #extraPackages = ps: [ ps.pytorch_custom2 ];
-          #editablePackageSources = {
-          #  ronald_bdl = "${builtins.getEnv "HOME"}/MS-Thesis/my-python-package/ronald_bdl";
-          #ronald_bdl = ./my-python-package/ronald_bdl;
-          #};
-
-          # For jupyter-lab's use, there is no need to add packages that 
-          # are frequently edited.
-          # Just import by using
-          #
-          # import sys
-          # sys.path.append("/home/sepiabrown/MS-Thesis/my-python-package/")
-          # import ronald_bdl
         };
-
-        #pkgs_1703 = import (builtins.fetchGit {
-        #  # Descriptive name to make the store path easier to identify
-        #  name = "nixos-1703";
-        #  url = "https://github.com/nixos/nixpkgs/";
-        #  # Commit hash for nixos-unstable as of 2018-09-12
-        #  # `git ls-remote https://github.com/nixos/nixpkgs nixos-unstable`
-        #  #allRefs = true;
-        #  ref = "release-17.09";
-        #  rev = "3ba3d8d8cbec36605095d3a30ff6b82902af289c";
-        #  #rev = "1849e695b00a54cda86cb75202240d949c10c7ce"; 1703
-        #  #rev = "a7ecde854aee5c4c7cd6177f54a99d2c1ff28a31"; 2111
-        #}) { system = system; };
-
-        #python-with-my-packages = (pkgs_1703.python27.withPackages (p: with p; [
-        #  numpy
-        #])).override (args: { ignoreCollisions = true; });
 
         pyproject = builtins.fromTOML (builtins.readFile ./pyproject.toml);
         depNames = builtins.attrNames pyproject.tool.poetry.dependencies;
 
-        iPythonWithPackages = pkgs.jupyterWith_python_custom.kernels.iPythonWith {
-          name = "ms-thesis--env";
+        iPythonWithPackages = pkgs.jupyterWith.kernels.iPythonWith {
+          name = "my-awesome-python-env";
           python3 = python_custom;
           packages = p:
-            let
-              # Building the local package using the standard way.
-              myPythonPackage = p.buildPythonPackage {
-                pname = "MyPythonPackage";
-                version = "1.0";
-                src = ./my-python-package;
-              };
+          let
+              ## Building the local package using the standard way.
               #myPythonPackage = p.buildPythonPackage {
-              #  pname = "nbdev-cards";
-              #  version = "0.0.1";
-              #  src = ./nbdev_cards;
-              #  buildInputs = [
-              #    p.fastcore
-              #  ];
+              #  pname = "MyPythonPackage";
+              #  version = "1.0";
+              #  src = ./my-python-package;
               #};
-              # Getting dependencies using Poetry.
               poetryDeps =
                 builtins.map (name: builtins.getAttr name p) depNames;
-              # p : gets packages from 'python3 = python' ? maybe?
-            in
-            #[  ] ++ # adds nixpkgs.url version  python pkgs.
-            [ myPythonPackage ] ++ poetryDeps; ### ++ (poetryExtraDeps p);
+          in
+          poetryDeps; #++ [ myPythonPackage ];
         };
-        jupyterEnvironment = (pkgs.jupyterWith_python_custom.jupyterlabWith {
+
+        jupyterEnvironment = (pkgs.jupyterWith.jupyterlabWith {
           kernels = [ iPythonWithPackages ];
-          extraPackages = ps: [
-            ps.protobuf # ps.protobuf3_9
-          ];
-          #extraJupyterPath = pkgs: [
-          #export CUDA_PATH=${pkgs.cudatoolkit}
-          #export LD_LIBRARY_PATH=${pkgs.linuxPackages.nvidia_x11}/lib:${pkgs.ncurses5}/lib
-          #export EXTRA_LDFLAGS="-L/lib -L${pkgs.linuxPackages.nvidia_x11}/lib"
-          #export EXTRA_CCFLAGS="-I/usr/include"
+          #extraPackages = ps: [
           #];
         });
-        #nixGL = fetchzip { fetchTarball {
-        #  url = "https://github.com/guibou/nixGL/archive/master.tar.gz";
-        #  sha256 = "sha256:093lf41pp22ndkibm1fqvi78vfzw255i3313l72dwkk86q9wsbzr";
-        #pli#b.fakeSha256;
-        #};
-        #myNixGL = (import "${nixGL}/default.nix" {
-        #  nvidiaVersion = "440.64.00";
-        #  nvidiaHash = "08yln39l82fi5hmn06xxi3sl6zb4fgshhhq3m42ksiglradjd0ah";
-        #  inherit pkgs;
-        #}).nixGLNvidia;
+
         apps.jupyter-lab = {
           type = "app";
           program = "${jupyterEnvironment}/bin/jupyter-lab";
         };
-        apps.jupyter-notebook = {
-          type = "app";
-          program = "${python_custom.pkgs.notebook}/bin/jupyter-notebook";
-        };
-        apps.jupyter-notebookk = {
-          type = "app";
-          program = "${python_custom.pkgs.notebook}/bin/jupyter-notebook";
-        };
+
         packages.default = packages.poetry;
-        packages.poetry = python_custom.pkgs.poetry;
+        packages.python_shell = pkgs.python39;
+        packages.poetry = nixpkgs.legacyPackages.${system}.poetry;
         #packages.jupyterlab = jupyterEnvironment;
         packages.nbdev = python_custom.pkgs.nbdev;
-          #source ${pkgs.writeShellScriptBin "export" ''
-          #  ''}/bin/export
-          #exec ${python_custom.pkgs.nbdev}/bin/nbdev_preview --port 3334
-        #packages.polynote = pkgs.polynote;
-        #packages.jep = pkgs.python3.pkgs.jep;
-        #packages.pythonenv = python_custom;
-        
+
         packages.quarto = with builtins; with nixpkgs; with pkgs; stdenv.mkDerivation rec {
           pname = "quarto";
           version = "1.1.189";
@@ -1224,81 +1047,69 @@
             runHook postInstall
           '';
         };
-        #nativeBuildInputs = [
-        #  pkgs.dpkg
-        #  pkgs.autoPatchelfHook
-        #];
-        #unpackCmd = "dpkg-deb -x $curSrc .";
-        
-        #devShells.quarto = pkgs.mkShell rec {
-        #  packages = [
-        #    self.packages.${system}.quarto-cli
-        #  ];
-
-        #  #JULIA_DEPOT_PATH = "./.julia_depot";
-
-        #  shellHook = ''export LD_LIBRARY_PATH='' + LD_LIBRARY_PATH + ''
-        #    export TF_ENABLE_ONEDNN_OPTS=0 # when using GPU, oneDNN off is recommended 
-        #  '';
-        #};
-        #devShells.nbdev = pkgs.mkShell rec {
-        #  packages = [
-        #    jupyterEnvironment
-        #    python_custom.pkgs.nbdev
-        #  ];
-
-        #  #JULIA_DEPOT_PATH = "./.julia_depot";
-
-        #  shellHook = ''export LD_LIBRARY_PATH='' + LD_LIBRARY_PATH + ''
-        #    export TF_ENABLE_ONEDNN_OPTS=0 # when using GPU, oneDNN off is recommended 
-        #  '';
-        #};
 
         devShells.default = pkgs.mkShell rec {
           packages = [
-            # stdenv reference :
-            # https://discourse.nixos.org/t/nixos-with-poetry-installed-pandas-libstdc-so-6-cannot-open-shared-object-file/8442/3
-            # https://nixos.wiki/wiki/Packaging/Quirks_and_Caveats#ImportError:_libstdc.2B.2B.so.6:_cannot_open_shared_object_file:_No_such_file
-            #stdenv.cc.cc.lib
             python_custom
-            #iPythonWithPackages.runtimePackages 
-            #jupyterEnvironment
-            #python_custom.pkgs.poetry
-            python_custom.pkgs.nbdev
-            #python_custom.pkgs.quarto
-            #python_custom.pkgs.kaggle
-            pkgs.graphviz
-
-            self.packages.${system}.quarto
-
-            nixgl.defaultPackage.${system}
-            pkgs.linuxPackages.nvidia_x11
-
-            pkgs.nvtop
-            pkgs.deno
-            pkgs.lldb
-            # polynote : go to polynote folder that has deps, notebooks folder and config.yml inside.
-            # run 'polynote'. current port in config.yml is 5555
-            #pkgs.polynote
-            #(pkgs.lib.getBin pkgs.graphviz)
-            #(pkgs.lib.getBin pkgs.caffe)
-            #(pkgs.lib.getBin python_custom)
-
-            #iJulia.runtimePackages
+            jupyterEnvironment
+            pkgs.ffmpeg
           ];
 
-          #JULIA_DEPOT_PATH = "./.julia_depot";
-
           shellHook = ''export LD_LIBRARY_PATH='' + LD_LIBRARY_PATH + ''
+            export LD_LIBRARY_PATH=${nixpkgs.lib.makeLibraryPath [ pkgs.cudaPackages.cudatoolkit "${pkgs.cudaPackages.cudatoolkit}" pkgs.cudaPackages.cudnn pkgs.nvidia_custom ]}:$LD_LIBRARY_PATH
             export TF_ENABLE_ONEDNN_OPTS=0 # when using GPU, oneDNN off is recommended 
             export PYTHONPATH=~/Jupyter_Python/nbdev_cards:$PYTHONPATH
           '';
-          #trivial = nixpkgs.lib.concatStringsSep "/" [(builtins.getEnv "HOME") "Jupyter_Python" "src"];
         };
       }
     ));
 }
-
+####################################################################################################
+# How poetry2nix works
+#
+#   nixpkgs    flake.nix   poetry.lock
+#      O           X           X        Use current pkgs' python packages
+#      O           X           O        Automatically make packages by inferring dependencies from poetry.lock
+#      O           O           X        Use the overriden code from flake.nix
+#      O           O           O        Use the overriden code from flake.nix
+#      X           X           O        ? only example : etils -> infinite recursion
+#      X           O           X        Use the overriden code from flake.nix
+#      X           O           Q        Use the overriden code from flake.nix
+#
+# - If certain package is not in poetry.lock, that package is not importable!
+# 
+# Workflow
+#
+# 1. Packages that needs special care (ex. cuda related datascience packages) : 
+#    pin them to existing nixos-unstable/nixos-YY.MM in the flake.nix
+#
+# 2. Try packaging only with poetry.lock as much as possible
+#    - no module found : try solving with pyprev
+#
+# 3. Try packaging with nixos-unstable with version, src unlimited
+#    - pkgs_2211.python39Packages..override {
+#      }).overridePythonAttrs (old: rec {
+#        version = pyprev..version;
+#        src = pyprev..src;
+#      });
+#
+# 4. Try packaging with nixos-unstable with version, src fixed to nixpkgs-unstable
+#    - pkgs_2211.python39Packages..override {
+#      }
+#
+# 5. Try packaging with nixos-YY.MM with version, src unlimited
+#    - pyfinal.python_selected..override {
+#      }).overridePythonAttrs (old: rec {
+#        version = pyprev..version;
+#        src = pyprev..src;
+#      });
+#
+# 6. Try packaging with nixos-YY.MM with version, src fixed to nixos-YY.MM
+#    - pyfinal.python_selected..override {
+#      }
+#
+####################################################################################################
+#
 # Initialize by 
 # $ nix shell nixpkgs#poetry
 # $ poetry init
@@ -1319,11 +1130,11 @@
 #
 # Library Path
 #   - old version : 
-#   export LD_LIBRARY_PATH=${pkgs.cudaPackages_11_6.cudatoolkit}/lib64:${pkgs.cudaPackages_11_6.cudatoolkit.lib}/lib:${pkgs.cudaPackages_11_6.cudnn}/lib:${pkgs.nvidia_custom}/lib:${nixpkgs.lib.makeLibraryPath [ pkgs.cudaPackages_11_6.cudatoolkit "${pkgs.cudaPackages_11_6.cudatoolkit}" ]}:$LD_LIBRARY_PATH
+#   export LD_LIBRARY_PATH=${pkgs.cudaPackages.cudatoolkit}/lib64:${pkgs.cudaPackages.cudatoolkit.lib}/lib:${pkgs.cudaPackages.cudnn}/lib:${pkgs.nvidia_custom}/lib:${nixpkgs.lib.makeLibraryPath [ pkgs.cudaPackages.cudatoolkit "${pkgs.cudaPackages.cudatoolkit}" ]}:$LD_LIBRARY_PATH
 #   - new version :
-#   export LD_LIBRARY_PATH=${nixpkgs.lib.makeLibraryPath [ pkgs.cudaPackages_11_6.cudatoolkit "${pkgs.cudaPackages_11_6.cudatoolkit}" pkgs.cudaPackages_11_6.cudnn pkgs.nvidia_custom ]}:$LD_LIBRARY_PATH
-# ${nixpkgs.lib.makeLibraryPath [ pkgs.cudaPackages_11_6.cudatoolkit ]} == ${pkgs.cudaPackages_11_6.cudatoolkit.lib}/lib
-# ${nixpkgs.lib.makeLibraryPath [ "${pkgs.cudaPackages_11_6.cudatoolkit}" ]} == ${pkgs.cudaPackages_11_6.cudatoolkit}/lib
+#   export LD_LIBRARY_PATH=${nixpkgs.lib.makeLibraryPath [ pkgs.cudaPackages.cudatoolkit "${pkgs.cudaPackages.cudatoolkit}" pkgs.cudaPackages.cudnn pkgs.nvidia_custom ]}:$LD_LIBRARY_PATH
+# ${nixpkgs.lib.makeLibraryPath [ pkgs.cudaPackages.cudatoolkit ]} == ${pkgs.cudaPackages.cudatoolkit.lib}/lib
+# ${nixpkgs.lib.makeLibraryPath [ "${pkgs.cudaPackages.cudatoolkit}" ]} == ${pkgs.cudaPackages.cudatoolkit}/lib
 # 
 # Error Log
 #
@@ -1380,7 +1191,7 @@
 #
 # Solution :
 # - Overriden with 
-#   xgboost = pyfinal.python_selected.pkgs.xgboost;
+#   xgboost = pyfinal.python_selected.xgboost;
 #
 # - numpy gets built again even if we already have numpy built
 #   - due to package update, the associated package might have started following numpy
@@ -1456,10 +1267,27 @@
 # error: stack overflow (possible infinite recursion)
 #
 # Solution :
-# - Use `pyfinal.python_selected.pkgs.XXXX.override`
+# - Use `pyfinal.python_selected.XXXX.override`
 # - Examples : setuptools, setuptools-scm, pip
 #
 # Error: No module named 'pkg_resources' when running nbdev inside devShell
 #
 # Solution :
 # - We need both `python_custom` and `python_custom.pkgs.nbdev` listed in devShell
+#
+####################################################################################################
+                #
+                # = pyprev..overridePythonAttrs (old: rec {
+                #  buildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.buildInputs or [ ]) ++ [ final. ]);
+                #  nativeBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.nativeBuildInputs or [ ]) ++ [ final. ]);
+                #  propagatedBuildInputs = builtins.filter (x: ! builtins.elem x [ ]) ((old.propagatedBuildInputs or [ ]) ++ [ pyfinal. ]);
+                #});
+                # = (pyfinal.python_selected..override {
+                # = (pkgs_2211.python39Packages..override {
+                ## 1.23.0 : nixos-22.05< <22.11<
+                #  inherit (pyfinal)
+                #  ;
+                #}).overridePythonAttrs (old: rec {
+                #  version = pyprev..version;
+                #  src = pyprev..src;
+                #});
