@@ -1,1 +1,1 @@
-# MS-Thesis
+# Jupyter environment powered by Nix
